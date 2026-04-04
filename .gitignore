@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.harness/
+tmp/
+.DS_Store
+.claude/settings.local.json
+.codex/
