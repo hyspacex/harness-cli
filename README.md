@@ -11,6 +11,8 @@ A CLI harness for long-running app-development loops:
 
 The harness owns the durable memory, not the model session. Every sprint leaves files under `.harness/runs/<run-id>/`, so you can resume interrupted runs, inspect failures, and keep the orchestration logic outside the coding agent.
 
+Inspired by Anthropic's [Harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps).
+
 ## Supported backends
 
 ### 1. Claude Agent SDK
