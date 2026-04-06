@@ -1,5 +1,15 @@
 import path from 'node:path';
-import type { EvalCriteria, Feature, HarnessConfig, PromptContext, RunState, SmokeConfig } from './types.js';
+import type {
+  CanonicalContract,
+  CanonicalEvaluation,
+  EvalCriteria,
+  Feature,
+  HarnessConfig,
+  PromptContext,
+  RunState,
+  SmokeConfig,
+  TaskCapabilities,
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Role system prompts — injected via the SDK systemPrompt option, separate
@@ -109,17 +119,6 @@ function smokeBlock(smoke: SmokeConfig, label: string): string {
   return `\n${label}:\n${lines.join('\n')}\n`;
 }
 
-function providerHasBrowserQa(config: HarnessConfig): boolean {
-  if (config.provider === 'claude-sdk') {
-    const evaluatorServers = config.claudeSdk.roleOverrides.evaluator?.mcpServers || {};
-    return 'playwright' in evaluatorServers;
-  }
-  if (config.provider === 'codex') {
-    return config.codex.assumePlaywrightMcp;
-  }
-  return false;
-}
-
 /**
  * Build the evaluation rubric section from EvalCriteria.
  * Combines universal criteria definitions with project-specific criteria.
@@ -170,6 +169,8 @@ function buildRubricSection(criteria: EvalCriteria | null): string {
   sections.push(barLines.join('\n'));
   sections.push('- Every contract criterion satisfied');
   sections.push('- No high-severity bugs');
+  sections.push('');
+  sections.push('NOTE: The harness computes the pass/fail verdict from your scores. You do not write a verdict. Score each criterion honestly — the harness will determine whether the sprint passes based on these thresholds.');
 
   return sections.join('\n');
 }
@@ -202,12 +203,107 @@ function buildEvaluatorJsonExample(criteria: EvalCriteria | null): string {
 
   const scores = Object.fromEntries(scoreKeys.map((key) => [key, 4]));
   return JSON.stringify({
-    status: 'pass',
+    confidence: 'medium',
+    evidenceQuality: 'adequate',
     summary: '...',
     scores,
     bugs: [],
     filesWritten: ['...'],
   });
+}
+
+function buildCanonicalContractExample(sprintNumber: number, feature: Feature, markdownPath: string): string {
+  const example: CanonicalContract = {
+    version: 1,
+    sprint: sprintNumber,
+    feature: {
+      id: feature.id,
+      title: feature.title,
+    },
+    inScope: ['Deliver the scoped sprint outcome'],
+    outOfScope: ['Do not expand beyond the backlog item'],
+    doneMeans: [
+      {
+        id: 'DM1',
+        requirement: 'Concrete, testable requirement',
+        verification: ['Exact command, URL, or interaction to run'],
+        failConditions: ['Observable failure condition'],
+        evidenceTargets: ['Screenshot, DOM state, file output, or CLI text to inspect'],
+      },
+    ],
+    verificationSteps: ['One or more evaluator steps in execution order'],
+    hardThresholds: ['conceptAlignment >= 4'],
+    risksNotes: ['Known implementation risk or constraint'],
+    sourceMarkdownPath: markdownPath,
+  };
+  return JSON.stringify(example, null, 2);
+}
+
+function buildCanonicalEvaluationExample(
+  criteria: EvalCriteria | null,
+  sprintNumber: number,
+  evaluationRound: number,
+  feature: Feature,
+  markdownPath: string,
+): string {
+  const scoreKeys = criteria
+    ? [
+        ...Object.keys(criteria.universalCriteria),
+        ...criteria.projectCriteria.map((projectCriterion) => projectCriterion.id),
+      ]
+    : ['conceptAlignment', 'completeness', 'craft', 'intentionality'];
+
+  const example: CanonicalEvaluation = {
+    version: 1,
+    sprint: sprintNumber,
+    evaluationRound,
+    feature: {
+      id: feature.id,
+      title: feature.title,
+    },
+    confidence: 'medium',
+    evidenceQuality: 'adequate',
+    summary: 'Brief verdict summary',
+    scores: Object.fromEntries(scoreKeys.map((key) => [key, 4])),
+    contractCriteria: [
+      {
+        criterion: 'Done Means item summary',
+        status: 'pass',
+        evidence: ['path/to/evidence.png'],
+        notes: 'Why this passed or failed',
+      },
+    ],
+    projectPrinciples: [
+      {
+        criterion: 'Project principle summary',
+        status: 'pass',
+        evidence: ['path/to/evidence.txt'],
+        notes: 'Why this passed or failed',
+      },
+    ],
+    bugs: [
+      {
+        severity: 'high',
+        title: 'Example bug title',
+        repro: 'Exact repro steps',
+        expected: 'Expected behavior',
+        actual: 'Observed behavior',
+        evidence: ['path/to/evidence.png'],
+        rootCause: 'Diagnosis grounded in evidence',
+        previousFixFailure: null,
+      },
+    ],
+    suggestedRepairPlan: ['Concrete fix step'],
+    notes: ['Any extra evaluator note'],
+    sourceMarkdownPath: markdownPath,
+    devSmoke: {
+      required: true,
+      ok: true,
+      logPath: 'logs/dev-smoke-s01-r00.log',
+      url: 'http://127.0.0.1:3000',
+    },
+  };
+  return JSON.stringify(example, null, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +474,11 @@ export function buildGeneratorDraftContractPrompt(
   previousReviewPath: string | null,
 ): string {
   const criteriaSummary = buildCriteriaSummary(context.evalCriteria);
+  const canonicalContractExample = buildCanonicalContractExample(
+    sprintNumber,
+    feature,
+    context.currentContractPath!,
+  );
 
   const revisionNote = negotiationRound > 0 && previousReviewPath
     ? `\nThis is revision round ${negotiationRound}. The evaluator rejected your previous draft.
@@ -411,7 +512,16 @@ Current feature:
 - acceptanceCriteria: ${JSON.stringify(feature.acceptanceCriteria, null, 2)}
 - dependsOn: ${JSON.stringify(feature.dependsOn || [])}
 
-Write this file exactly: ${context.currentContractPath}
+Write these files exactly:
+
+1. ${context.currentContractPath}
+
+2. ${context.currentContractJsonPath}
+   - Valid JSON with EXACTLY this shape:
+${canonicalContractExample}
+   - \`sourceMarkdownPath\` MUST equal ${context.currentContractPath}
+   - \`doneMeans\` MUST be the canonical representation of the markdown contract.
+   - The markdown and JSON contracts must agree. If they differ, the JSON contract is treated as the canonical benchmark artifact.
 
 Contract format:
 # Sprint ${sprintNumber} Contract
@@ -432,7 +542,7 @@ ${criteriaSummary}
 
 Keep the scope narrow enough for a single sprint.
 ${smokeBlock(context.config.smoke, 'Available smoke commands')}
-${jsonOnlyContract('{"status":"ok","summary":"...","filesWritten":["..."],"contractPath":"..."}')}`;
+${jsonOnlyContract('{"status":"ok","summary":"...","filesWritten":["..."],"contractPath":"...","contractJsonPath":"..."}')}`;
 }
 
 export function buildEvaluatorReviewContractPrompt(
@@ -498,6 +608,9 @@ export function buildGeneratorPrompt(
   repairRound: number,
   previousEvalPath: string | null,
   allPriorEvalPaths: string[] = [],
+  latestFrozenEvidenceDir: string | null = null,
+  allPriorFrozenEvidenceDirs: string[] = [],
+  failingScores: { criterion: string; score: number; passBar: number }[] = [],
 ): string {
   const commitInstruction = context.config.git.autoCommit
     ? `Create exactly one git commit when the sprint work is done. Use the message: sprint ${sprintNumber}: ${feature.id} ${feature.title}`
@@ -505,15 +618,27 @@ export function buildGeneratorPrompt(
 
   const smokeSection = smokeBlock(context.config.smoke, 'Smoke commands');
 
-  const evidenceDir = path.join(path.dirname(context.currentEvalPath || context.runDir), 'evidence');
+  const failingScoresNote = failingScores.length > 0
+    ? `\nCRITICAL — The harness rejected the previous evaluation because these scores are below their pass bars:
+${failingScores.map((f) => `- ${f.criterion}: scored ${f.score}, needs >= ${f.passBar}`).join('\n')}
+
+This is the PRIMARY reason this repair round exists. The evaluator may have said "pass" in its report,
+but the harness independently checks all scores against thresholds. You MUST focus on raising these
+scores above their pass bars. Cosmetic fixes will not help if these criteria remain unmet.
+Read the rubric for each failing criterion in the contract JSON to understand what the next score
+level requires, then implement those specific capabilities.
+`
+    : '';
 
   const repairNote = repairRound > 0
     ? `\nThis is repair round ${repairRound}. Read the previous evaluation report carefully and fix every issue it identified.
-
+${failingScoresNote}
 IMPORTANT — Evidence-based repair:
-- The evaluator saved screenshots and DOM diagnostics to: ${evidenceDir}
+- The evaluator's evidence snapshot is frozen at: ${latestFrozenEvidenceDir || '(no frozen evidence snapshot found)'}
   Read these files (including images) to SEE what the evaluator saw. The evaluator has
-  browser access but you do not — this evidence is your only visual window into the app.
+  browser access but you do not — this evidence snapshot is your only visual window into the app.
+- Treat the frozen evidence as read-only benchmark data. Do NOT modify, delete, or overwrite
+  anything under that path.
 - Before implementing the evaluator's suggested fix, verify the root cause is correct.
   The evaluator's diagnosis may be wrong. Check the measured DOM evidence (element
   dimensions, computed styles, attribute values) and the code to form your own diagnosis.
@@ -538,8 +663,7 @@ Read these files first:
 - ${context.paths.projectPrinciples}
 - ${context.paths.progress}
 - ${context.currentContractPath}
-${previousEvalPath ? `- ${previousEvalPath}  (LATEST EVAL — fix every issue listed here)\n- ${evidenceDir}/  (EVIDENCE — screenshots and DOM diagnostics from the evaluator. Read image files to see what the evaluator saw.)` : ''}
-${allPriorEvalPaths.length > 1 ? `\nAll prior eval reports (read these to understand what fixes were already attempted):\n${allPriorEvalPaths.map((p, i) => `- ${p}  (round ${i})`).join('\n')}` : ''}
+${context.currentContractJsonPath ? `- ${context.currentContractJsonPath}\n` : ''}${previousEvalPath ? `- ${previousEvalPath}  (LATEST EVAL — fix every issue listed here)\n${latestFrozenEvidenceDir ? `- ${latestFrozenEvidenceDir}/  (FROZEN EVIDENCE — screenshots and diagnostics from the evaluator. Read image files to see what the evaluator saw.)\n` : ''}` : ''}${allPriorEvalPaths.length > 1 ? `\nAll prior eval reports (read these to understand what fixes were already attempted):\n${allPriorEvalPaths.map((p, i) => `- ${p}  (round ${i})${allPriorFrozenEvidenceDirs[i] ? `\n- ${allPriorFrozenEvidenceDirs[i]}/  (frozen evidence snapshot for round ${i})` : ''}`).join('\n')}` : ''}
 
 Current feature:
 - id: ${feature.id}
@@ -575,13 +699,26 @@ export function buildEvaluatorPrompt(
   feature: Feature,
   sprintNumber: number,
   evaluationRound: number,
+  capabilities: TaskCapabilities,
+  devSmoke: {
+    required: boolean;
+    ok: boolean;
+    logPath: string | null;
+    url: string | null;
+  },
   devServerUrl?: string | null,
+  previousVerdictPath?: string | null,
 ): string {
   const smokeSection = smokeBlock(context.config.smoke, 'Available smoke commands');
-
-  const evidenceDir = path.join(path.dirname(context.currentEvalPath!), 'evidence');
-
-  const hasBrowserQa = providerHasBrowserQa(context.config);
+  const evidenceDir = path.join(path.dirname(context.currentEvalPath!), 'evidence', `s${String(sprintNumber).padStart(2, '0')}-r${String(evaluationRound).padStart(2, '0')}`);
+  const hasBrowserQa = capabilities.hasBrowserQa;
+  const canonicalEvaluationExample = buildCanonicalEvaluationExample(
+    context.evalCriteria,
+    sprintNumber,
+    evaluationRound,
+    feature,
+    context.currentEvalPath!,
+  );
 
   const playwrightSection = devServerUrl && hasBrowserQa
     ? `
@@ -628,6 +765,19 @@ ${smokeSection}`
 No dev server is running. Evaluate based on code review and any available commands.
 ${smokeSection}`;
 
+  const previousVerdictSection = previousVerdictPath
+    ? `
+## Previous Harness Verdict
+The harness computed a FAIL verdict for the previous evaluation round.
+Read the full verdict at: ${previousVerdictPath}
+
+The harness checks every score against its pass bar independently.
+Grade this round based on the CURRENT state of the code — your previous scores may
+have been accurate for the previous round. But be aware that scores below their pass
+bars are the reason this repair round exists.
+`
+    : '';
+
   const rubricSection = buildRubricSection(context.evalCriteria);
   const evaluatorJsonExample = buildEvaluatorJsonExample(context.evalCriteria);
 
@@ -639,6 +789,7 @@ Run artifact root: ${context.runDir}
 Your job is to verify whether the current sprint truly satisfies the contract.
 Be skeptical. Prefer concrete bug reports over vague criticism.
 ${playwrightSection}
+${previousVerdictSection}
 Read these files:
 - ${context.paths.prompt}
 - ${context.paths.researchBrief}
@@ -656,6 +807,19 @@ Current feature:
 
 Write this file exactly: ${context.currentEvalPath}
 
+Write this canonical JSON file exactly: ${context.currentEvalJsonPath}
+- Valid JSON with EXACTLY this shape:
+${canonicalEvaluationExample}
+- \`confidence\` MUST be one of: low, medium, high.
+- \`evidenceQuality\` MUST be one of: weak, adequate, strong.
+- \`sourceMarkdownPath\` MUST equal ${context.currentEvalPath}
+- \`devSmoke\` MUST reflect the harness-run dev smoke result:
+  - required: ${String(devSmoke.required)}
+  - ok: ${String(devSmoke.ok)}
+  - logPath: ${devSmoke.logPath || 'null'}
+  - url: ${devSmoke.url || 'null'}
+- Every bug's \`evidence\` array must reference saved files under ${evidenceDir}.
+
 ## Evaluation Criteria
 
 ${rubricSection}
@@ -664,8 +828,8 @@ Also grade against each project principle in ${context.paths.projectPrinciples}.
 
 ## Report format
 # Sprint ${sprintNumber} Evaluation Round ${evaluationRound}
-## Verdict
 ## Scorecard
+(Score each criterion honestly. Do NOT write a pass/fail verdict — the harness computes the verdict from your scores.)
 ## Contract Criteria Check (each Done Means item: pass/fail with evidence)
 ## Project Principles Check (each principle: pass/fail)
 ## Bugs
@@ -681,6 +845,7 @@ For each bug include:
 - In the final JSON, \`scores\` MUST include every universal criterion and every project-specific criterion id listed above.
 - Do not omit project-specific scores just because they already appear in the markdown report.
 - Missing score keys will be treated as a failed evaluation by the harness.
+- Include \`confidence\` and \`evidenceQuality\` in the final JSON response as well.
 
 ${jsonOnlyContract(evaluatorJsonExample)}`;
 }
@@ -692,11 +857,14 @@ ${jsonOnlyContract(evaluatorJsonExample)}`;
 export function createPromptContext(
   config: HarnessConfig,
   runState: RunState,
+  capabilities: Record<'researcher' | 'planner' | 'generator' | 'evaluator', TaskCapabilities>,
   evalCriteria: EvalCriteria | null = null,
 ): PromptContext {
   const runDir = runState.runDir;
   return {
     config,
+    roleProviders: runState.roleProviders,
+    capabilities,
     workspace: config.workspace,
     runDir,
     userPrompt: runState.prompt,
@@ -712,7 +880,9 @@ export function createPromptContext(
       events: path.join(runDir, 'events.ndjson'),
     },
     currentContractPath: runState.currentContractPath,
+    currentContractJsonPath: runState.currentContractJsonPath,
     currentEvalPath: runState.currentEvalPath,
+    currentEvalJsonPath: runState.currentEvalJsonPath,
     evalCriteria,
   };
 }
