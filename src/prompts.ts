@@ -234,6 +234,7 @@ function buildCanonicalContractExample(sprintNumber: number, feature: Feature, m
     verificationSteps: ['One or more evaluator steps in execution order'],
     hardThresholds: ['conceptAlignment >= 4'],
     risksNotes: ['Known implementation risk or constraint'],
+    passBarOverrides: {},
     sourceMarkdownPath: markdownPath,
   };
   return JSON.stringify(example, null, 2);
@@ -540,6 +541,11 @@ For each "Done Means" criterion:
 
 ${criteriaSummary}
 
+If this sprint's scope does not fully cover a scored criterion (e.g., AI integration is
+deferred to a later sprint), include a \`passBarOverrides\` field in the contract JSON with
+adjusted pass bars for those criteria. Only lower bars for criteria genuinely out of scope —
+do not lower bars to make the sprint easier. Example: \`"passBarOverrides": {"aiIntegrationDepth": 2}\`
+
 Keep the scope narrow enough for a single sprint.
 ${smokeBlock(context.config.smoke, 'Available smoke commands')}
 ${jsonOnlyContract('{"status":"ok","summary":"...","filesWritten":["..."],"contractPath":"...","contractJsonPath":"..."}')}`;
@@ -586,6 +592,10 @@ Review checklist — for each "Done Means" criterion ask:
 
 Compare the draft against the feature's acceptanceCriteria in the backlog.
 Flag any acceptance criterion that is NOT covered by a "Done Means" entry.
+
+If the contract includes \`passBarOverrides\` in the JSON, verify each override is justified
+by the sprint's scope. Reject overrides that lower bars for work that IS in scope for this sprint.
+Approve overrides for criteria that are genuinely deferred to a later sprint.
 
 Write your review to: ${reviewPath}
 
