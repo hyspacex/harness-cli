@@ -4,25 +4,40 @@ import { exec as execCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import type {
   Backlog,
+  CanonicalContract,
+  CanonicalEvaluation,
+  ConfidenceLevel,
+  EvidenceQuality,
   EvalCriteria,
   Feature,
   HarnessConfig,
+  HarnessVerdict,
   NegotiationRound,
-  Provider,
+  ProviderRegistry,
+  RepairDirective,
+  RepairDirectiveCriterion,
+  RoleProviderMap,
   RunState,
+  TaskCapabilities,
 } from './types.js';
 import { DevServer } from './dev-server.js';
 import {
   appendNdjson,
+  copyTree,
   ensureDir,
   extractJsonObject,
   fileExists,
   getNextPendingFeature,
+  hashFile,
+  listFilesRecursive,
   newRunId,
   nowIso,
   readJson,
   readText,
   relativeTo,
+  getFailingScores,
+  getPassingScores,
+  isPlainObject,
   resolvePass,
   truncate,
   validateBacklog,
@@ -37,6 +52,7 @@ import {
   buildPlannerPrompt,
   buildResearcherPrompt,
   createPromptContext,
+  UNIVERSAL_RUBRICS,
 } from './prompts.js';
 
 const execAsync = promisify(execCallback);
@@ -52,22 +68,41 @@ interface ShellCommandResult {
   exitCode: number;
 }
 
+interface DevSmokeResult {
+  ok: boolean;
+  logPath: string;
+  url: string;
+  statusCode: number | null;
+  bodySnippet: string;
+  error: string | null;
+}
+
 interface SprintProgress {
   passed: boolean;
   nextRound: number;
   latestEvalPath: string | null;
   latestEvalParsed: Record<string, unknown> | null;
   allEvalPaths: string[];
+  allFrozenEvidenceDirs: string[];
 }
 
 export class HarnessRunner {
   private config: HarnessConfig;
-  private provider: Provider;
+  private providerRegistry: ProviderRegistry;
+  private roleProviders: RoleProviderMap;
+  private capabilities: Record<'researcher' | 'planner' | 'generator' | 'evaluator', TaskCapabilities>;
   private output: Output;
 
-  constructor(config: HarnessConfig, provider: Provider, output: Output = console) {
+  constructor(config: HarnessConfig, providerRegistry: ProviderRegistry, output: Output = console) {
     this.config = config;
-    this.provider = provider;
+    this.providerRegistry = providerRegistry;
+    this.roleProviders = providerRegistry.getRouting();
+    this.capabilities = {
+      researcher: providerRegistry.getTaskCapabilities('researcher'),
+      planner: providerRegistry.getTaskCapabilities('planner'),
+      generator: providerRegistry.getTaskCapabilities('generator'),
+      evaluator: providerRegistry.getTaskCapabilities('evaluator'),
+    };
     this.output = output;
   }
 
@@ -102,7 +137,8 @@ export class HarnessRunner {
     const state: RunState = {
       id: runId,
       prompt,
-      provider: this.config.provider,
+      provider: this.providerSummary(),
+      roleProviders: { ...this.roleProviders },
       workspace: this.config.workspace,
       runDir,
       createdAt: nowIso(),
@@ -113,9 +149,12 @@ export class HarnessRunner {
       repairRound: 0,
       currentFeatureId: null,
       currentContractPath: null,
+      currentContractJsonPath: null,
       currentEvalPath: null,
+      currentEvalJsonPath: null,
+      currentVerdictPath: null,
       summary: null,
-      metrics: { completedFeatures: 0, blockedFeatures: 0 },
+      metrics: this.createInitialMetrics(),
       generatorSessionIds: {},
       currentNegotiation: null,
       smokeInstalledAt: null,
@@ -133,7 +172,9 @@ export class HarnessRunner {
       ensureDir(path.join(runState.runDir, 'contracts')),
       ensureDir(path.join(runState.runDir, 'evals')),
       ensureDir(path.join(runState.runDir, 'evals', 'evidence')),
+      ensureDir(path.join(runState.runDir, 'evals', 'evidence-frozen')),
       ensureDir(path.join(runState.runDir, 'handoff')),
+      ensureDir(path.join(runState.runDir, 'benchmarks', 'frozen')),
       ensureDir(path.join(runState.runDir, 'logs')),
       ensureDir(this.config.workspace),
       ensureDir(this.config.runRoot),
@@ -175,7 +216,7 @@ export class HarnessRunner {
       }
     }
 
-    if (this.config.provider === 'codex') {
+    if (new Set(Object.values(this.roleProviders)).has('codex')) {
       await this.ensureCodexProjectInstructions();
     }
   }
@@ -235,6 +276,97 @@ export class HarnessRunner {
     });
     this.output.log(`⚡ Dev server running at ${url}`);
     return server;
+  }
+
+  private async runDevServerSmoke(
+    runState: RunState,
+    sprintNumber: number,
+    evaluationRound: number,
+    url: string,
+  ): Promise<DevSmokeResult> {
+    const targetUrl = url;
+    const logPath = path.join(
+      runState.runDir,
+      'logs',
+      `dev-smoke-s${this.sprintPad(sprintNumber)}-r${this.roundPad(evaluationRound)}.log`,
+    );
+
+    this.output.log('→ dev-smoke');
+
+    try {
+      const response = await fetch(targetUrl, {
+        signal: AbortSignal.timeout(Math.max(3000, Math.min(this.config.smoke.startTimeout, 15000))),
+        redirect: 'follow',
+      });
+      const bodyText = await response.text();
+      const ok = response.status >= 200 && response.status < 400;
+      const bodySnippet = truncate(bodyText, 400);
+      await writeText(
+        logPath,
+        [
+          `$ GET ${targetUrl}`,
+          '',
+          `status: ${response.status}`,
+          '',
+          'body:',
+          bodySnippet,
+          '',
+        ].join('\n'),
+      );
+      await this.log(runState, {
+        type: 'smoke.dev',
+        ok,
+        statusCode: response.status,
+        url: targetUrl,
+        logPath: relativeTo(runState.runDir, logPath),
+      });
+      this.recordDevSmokeResult(ok, runState);
+      if (ok) {
+        this.output.log('✓ dev-smoke');
+      } else {
+        this.output.log(`⚠ dev-smoke failed — ${relativeTo(runState.runDir, logPath)}`);
+      }
+      return {
+        ok,
+        logPath,
+        url: targetUrl,
+        statusCode: response.status,
+        bodySnippet,
+        error: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await writeText(
+        logPath,
+        [
+          `$ GET ${targetUrl}`,
+          '',
+          'status: request_failed',
+          '',
+          'error:',
+          message,
+          '',
+        ].join('\n'),
+      );
+      await this.log(runState, {
+        type: 'smoke.dev',
+        ok: false,
+        statusCode: null,
+        url: targetUrl,
+        logPath: relativeTo(runState.runDir, logPath),
+        error: message,
+      });
+      this.recordDevSmokeResult(false, runState);
+      this.output.log(`⚠ dev-smoke failed — ${relativeTo(runState.runDir, logPath)}`);
+      return {
+        ok: false,
+        logPath,
+        url: targetUrl,
+        statusCode: null,
+        bodySnippet: '',
+        error: message,
+      };
+    }
   }
 
   private async runSmokeTest(
@@ -303,7 +435,11 @@ export class HarnessRunner {
       while (runState.sprint < this.config.maxSprints) {
         const feature = await this.getCurrentOrNextFeature(runState, backlog);
         if (!feature) {
+          const backlogComplete = backlog.features.every((candidate) => candidate.status === 'done');
           await this.finishRunFromBacklog(runState, backlog);
+          if (backlogComplete) {
+            await this.runFinalRegression(runState);
+          }
           return runState;
         }
 
@@ -321,7 +457,10 @@ export class HarnessRunner {
         const progress = await this.loadSprintProgress(runState, evalCriteria);
         let latestEvalPath = progress.latestEvalPath;
         let latestEvalParsed = progress.latestEvalParsed;
+        let latestRepairDirectivePath: string | null = null;
         const allEvalPaths = [...progress.allEvalPaths];
+        let latestFrozenEvidenceDir = progress.allFrozenEvidenceDirs.at(-1) || null;
+        const allFrozenEvidenceDirs = [...progress.allFrozenEvidenceDirs];
 
         if (progress.passed) {
           passed = true;
@@ -329,6 +468,7 @@ export class HarnessRunner {
           for (let evaluationRound = progress.nextRound; evaluationRound <= this.config.maxRepairRounds; evaluationRound += 1) {
             runState.repairRound = evaluationRound;
             runState.currentEvalPath = this.evalPath(runState.sprint, evaluationRound, runState.runDir);
+            runState.currentEvalJsonPath = this.evalJsonPath(runState.sprint, evaluationRound, runState.runDir);
             await this.saveRunState(runState);
 
             const genResult = await this.runGenerator(
@@ -337,6 +477,9 @@ export class HarnessRunner {
               latestEvalPath,
               allEvalPaths,
               evalCriteria,
+              latestFrozenEvidenceDir,
+              allFrozenEvidenceDirs,
+              latestRepairDirectivePath,
             );
 
             if (genResult.meta?.sessionId && !runState.generatorSessionIds[runState.sprint]) {
@@ -345,38 +488,114 @@ export class HarnessRunner {
             }
 
             let devServer: DevServer | null = null;
-            let evalResult: { parsed: Record<string, unknown> | null };
+            let evalResult: { parsed: Record<string, unknown> | null } | null = null;
             try {
-              devServer = await this.startDevServer(runState);
-              const smokeTest = await this.runSmokeTest(runState, runState.sprint, evaluationRound);
-              if (smokeTest && !smokeTest.ok) {
+              let devServerStarted = false;
+              try {
+                devServer = await this.startDevServer(runState);
+                devServerStarted = true;
+              } catch (error) {
+                const logPath = path.join(
+                  runState.runDir,
+                  'logs',
+                  `dev-smoke-s${this.sprintPad(runState.sprint)}-r${this.roundPad(evaluationRound)}.log`,
+                );
+                await writeText(logPath, String(error instanceof Error ? error.message : error));
+                this.recordDevSmokeResult(false, runState);
                 evalResult = await this.writeSyntheticSmokeFailureEval(
                   runState,
                   feature,
                   evaluationRound,
-                  smokeTest.logPath,
+                  'dev-smoke',
+                  logPath,
+                  null,
                 );
-              } else {
-                evalResult = await this.runEvaluator(
-                  runState,
-                  feature,
-                  evaluationRound,
-                  evalCriteria,
-                  devServer?.getUrl(),
-                );
+                await this.writeVerdict(runState, evaluationRound, evalResult.parsed, evalCriteria, true);
+              }
+
+              if (devServerStarted) {
+                const devSmoke = devServer?.getUrl()
+                  ? await this.runDevServerSmoke(runState, runState.sprint, evaluationRound, devServer.getUrl()!)
+                  : null;
+
+                if (devSmoke && !devSmoke.ok) {
+                  evalResult = await this.writeSyntheticSmokeFailureEval(
+                    runState,
+                    feature,
+                    evaluationRound,
+                    'dev-smoke',
+                    devSmoke.logPath,
+                    devSmoke.url,
+                  );
+                  await this.writeVerdict(runState, evaluationRound, evalResult.parsed, evalCriteria, true);
+                } else {
+                  const smokeTest = await this.runSmokeTest(runState, runState.sprint, evaluationRound);
+                  if (smokeTest && !smokeTest.ok) {
+                    evalResult = await this.writeSyntheticSmokeFailureEval(
+                      runState,
+                      feature,
+                      evaluationRound,
+                      'smoke-test',
+                      smokeTest.logPath,
+                      devServer?.getUrl() || null,
+                    );
+                    await this.writeVerdict(runState, evaluationRound, evalResult.parsed, evalCriteria, true);
+                  } else {
+                    evalResult = await this.runEvaluator(
+                      runState,
+                      feature,
+                      evaluationRound,
+                      evalCriteria,
+                      {
+                        required: !!devServer?.getUrl(),
+                        ok: devSmoke ? devSmoke.ok : !this.config.smoke.start,
+                        logPath: devSmoke?.logPath || null,
+                        url: devSmoke?.url || devServer?.getUrl() || null,
+                      },
+                      devServer?.getUrl(),
+                      runState.currentVerdictPath,
+                    );
+                  }
+                }
               }
             } finally {
               await this.stopDevServer(runState, devServer);
             }
 
+            if (!evalResult) {
+              throw new Error(`Evaluation round ${evaluationRound} did not produce a result.`);
+            }
+
+            latestFrozenEvidenceDir = await this.freezeEvaluatorEvidence(runState, evaluationRound);
             latestEvalPath = runState.currentEvalPath;
             latestEvalParsed = evalResult.parsed;
             allEvalPaths.push(runState.currentEvalPath);
+            if (latestFrozenEvidenceDir) {
+              allFrozenEvidenceDirs.push(latestFrozenEvidenceDir);
+            }
 
-            if (resolvePass(evalResult.parsed, evalCriteria)) {
+            await this.freezeBenchmarkArtifacts(
+              runState,
+              `eval-s${this.sprintPad(runState.sprint)}-r${this.roundPad(evaluationRound)}`,
+              [
+                runState.currentEvalPath!,
+                runState.currentEvalJsonPath!,
+                ...(latestFrozenEvidenceDir ? [latestFrozenEvidenceDir] : []),
+              ],
+            );
+
+            const isSmokeFailure = false;
+            const verdict = await this.writeVerdict(runState, evaluationRound, evalResult.parsed, evalCriteria, isSmokeFailure);
+
+            if (verdict.passed) {
+              this.recordRepairRoundsToPass('generator', evaluationRound, runState);
               passed = true;
               break;
             }
+
+            latestRepairDirectivePath = await this.writeRepairDirective(
+              runState, evaluationRound, verdict, evalCriteria, latestFrozenEvidenceDir,
+            );
           }
         }
 
@@ -443,7 +662,9 @@ export class HarnessRunner {
     runState.currentFeatureId = feature.id;
     runState.repairRound = 0;
     runState.currentContractPath = this.contractPath(runState.sprint, runState.runDir);
+    runState.currentContractJsonPath = this.contractJsonPath(runState.sprint, runState.runDir);
     runState.currentEvalPath = null;
+    runState.currentEvalJsonPath = null;
     runState.currentNegotiation = null;
   }
 
@@ -462,6 +683,12 @@ export class HarnessRunner {
       changed = true;
     }
 
+    const expectedContractJsonPath = this.contractJsonPath(runState.sprint, runState.runDir);
+    if (runState.currentContractJsonPath !== expectedContractJsonPath) {
+      runState.currentContractJsonPath = expectedContractJsonPath;
+      changed = true;
+    }
+
     if (runState.currentNegotiation && runState.currentNegotiation.featureId !== feature.id) {
       runState.currentNegotiation = null;
       changed = true;
@@ -475,6 +702,12 @@ export class HarnessRunner {
       }
     }
 
+    const expectedEvalJsonPath = this.evalJsonPath(runState.sprint, runState.repairRound, runState.runDir);
+    if (runState.currentEvalJsonPath !== expectedEvalJsonPath) {
+      runState.currentEvalJsonPath = expectedEvalJsonPath;
+      changed = true;
+    }
+
     if (changed) {
       await this.saveRunState(runState);
     }
@@ -483,7 +716,10 @@ export class HarnessRunner {
   private clearActiveSprintState(runState: RunState): void {
     runState.currentFeatureId = null;
     runState.currentContractPath = null;
+    runState.currentContractJsonPath = null;
     runState.currentEvalPath = null;
+    runState.currentEvalJsonPath = null;
+    runState.currentVerdictPath = null;
     runState.currentNegotiation = null;
     runState.repairRound = 0;
   }
@@ -541,6 +777,7 @@ export class HarnessRunner {
     evalCriteria: EvalCriteria | null,
   ): Promise<SprintProgress> {
     const allEvalPaths: string[] = [];
+    const allFrozenEvidenceDirs: string[] = [];
     let latestEvalPath: string | null = null;
     let latestEvalParsed: Record<string, unknown> | null = null;
 
@@ -551,14 +788,20 @@ export class HarnessRunner {
       allEvalPaths.push(evalPath);
       latestEvalPath = evalPath;
       latestEvalParsed = await this.readParsedTaskLog(this.evaluatorLogName(runState.sprint, round), runState);
+
+      const frozenEvidenceDir = this.frozenEvidenceDir(runState.sprint, round, runState.runDir);
+      if (await fileExists(frozenEvidenceDir)) {
+        allFrozenEvidenceDirs.push(frozenEvidenceDir);
+      }
     }
 
     return {
-      passed: resolvePass(latestEvalParsed, evalCriteria),
+      passed: resolvePass(latestEvalParsed, evalCriteria, runState.currentNegotiation?.passBarOverrides ?? {}),
       nextRound: allEvalPaths.length,
       latestEvalPath,
       latestEvalParsed,
       allEvalPaths,
+      allFrozenEvidenceDirs,
     };
   }
 
@@ -572,7 +815,7 @@ export class HarnessRunner {
     if (!criteriaExists || !briefExists) {
       runState.status = 'planning';
       await this.saveRunState(runState);
-      const context = createPromptContext(this.config, runState);
+      const context = createPromptContext(this.config, runState, this.capabilities);
       const prompt = buildResearcherPrompt(context);
       await this.runTask(
         runState,
@@ -589,6 +832,11 @@ export class HarnessRunner {
         },
         'researcher',
       );
+
+      await this.freezeBenchmarkArtifacts(runState, 'research', [
+        paths.researchBrief,
+        paths.evalCriteria,
+      ]);
     }
 
     return readJson<EvalCriteria | null>(paths.evalCriteria, null);
@@ -603,7 +851,7 @@ export class HarnessRunner {
     if (!backlogExists || !specExists || !principlesExist) {
       runState.status = 'planning';
       await this.saveRunState(runState);
-      const context = createPromptContext(this.config, runState, evalCriteria);
+      const context = createPromptContext(this.config, runState, this.capabilities, evalCriteria);
       const prompt = buildPlannerPrompt(context);
       await this.runTask(
         runState,
@@ -621,6 +869,12 @@ export class HarnessRunner {
         },
         'planner',
       );
+
+      await this.freezeBenchmarkArtifacts(runState, 'plan', [
+        paths.spec,
+        paths.backlog,
+        paths.projectPrinciples,
+      ]);
     }
 
     const backlogRaw = await readJson<Backlog | null>(paths.backlog, null);
@@ -630,6 +884,16 @@ export class HarnessRunner {
   }
 
   // ---------- Contract negotiation ----------
+
+  private async extractPassBarOverrides(runState: RunState): Promise<Record<string, number>> {
+    if (!runState.currentContractJsonPath) return {};
+    try {
+      const contract = await this.readCanonicalContract(runState.currentContractJsonPath);
+      return contract.passBarOverrides ?? {};
+    } catch {
+      return {};
+    }
+  }
 
   private async negotiateContract(
     runState: RunState,
@@ -646,6 +910,7 @@ export class HarnessRunner {
         rounds: [],
         finalContractPath: null,
         status: 'drafting',
+        passBarOverrides: {},
       };
       await this.saveRunState(runState);
     }
@@ -666,7 +931,7 @@ export class HarnessRunner {
         negotiation.status = 'drafting';
         await this.saveRunState(runState);
 
-        const context = createPromptContext(this.config, runState, evalCriteria);
+        const context = createPromptContext(this.config, runState, this.capabilities, evalCriteria);
         const draftPrompt = buildGeneratorDraftContractPrompt(
           context,
           feature,
@@ -684,10 +949,14 @@ export class HarnessRunner {
             prompt: draftPrompt,
             sprintNumber: runState.sprint,
             feature,
-            artifacts: { contract: runState.currentContractPath! },
+            artifacts: {
+              contract: runState.currentContractPath!,
+              contractJson: runState.currentContractJsonPath!,
+            },
           },
           `contract-draft-s${sprintPad}-n${roundPad}`,
         );
+        this.recordContractApprovalAttempt('generator', runState);
 
         roundState = {
           round,
@@ -716,7 +985,7 @@ export class HarnessRunner {
         negotiation.status = 'reviewing';
         await this.saveRunState(runState);
 
-        const reviewContext = createPromptContext(this.config, runState, evalCriteria);
+        const reviewContext = createPromptContext(this.config, runState, this.capabilities, evalCriteria);
         const reviewPrompt = buildEvaluatorReviewContractPrompt(
           reviewContext,
           feature,
@@ -741,14 +1010,24 @@ export class HarnessRunner {
         );
 
         roundState.reviewPath = reviewPath;
+        this.recordContractApprovalAttempt('evaluator', runState);
         roundState.approved = reviewResult.parsed?.status === 'approved';
         await this.saveRunState(runState);
 
         if (roundState.approved) {
+          this.recordContractApprovalPass('generator', runState);
+          this.recordContractApprovalPass('evaluator', runState);
           negotiation.finalContractPath = runState.currentContractPath!;
           negotiation.status = 'approved';
           await this.saveRunState(runState);
+          await this.freezeBenchmarkArtifacts(runState, `contract-s${sprintPad}`, [
+            runState.currentContractPath!,
+            runState.currentContractJsonPath!,
+            reviewPath,
+          ]);
           this.output.log(`✓ Contract approved after ${round + 1} negotiation round(s)`);
+          negotiation.passBarOverrides = await this.extractPassBarOverrides(runState);
+          await this.saveRunState(runState);
           return;
         }
       }
@@ -757,7 +1036,14 @@ export class HarnessRunner {
     negotiation.status = 'exhausted';
     negotiation.finalContractPath = runState.currentContractPath!;
     await this.saveRunState(runState);
+    await this.freezeBenchmarkArtifacts(runState, `contract-s${sprintPad}-exhausted`, [
+      runState.currentContractPath!,
+      runState.currentContractJsonPath!,
+      ...negotiation.rounds.map((roundState) => roundState.reviewPath).filter(Boolean) as string[],
+    ]);
     this.output.log(`⚠ Contract negotiation exhausted after ${maxRounds} round(s) — using last draft`);
+    negotiation.passBarOverrides = await this.extractPassBarOverrides(runState);
+    await this.saveRunState(runState);
   }
 
   // ---------- Generator / evaluator ----------
@@ -768,8 +1054,13 @@ export class HarnessRunner {
     previousEvalPath: string | null,
     allPriorEvalPaths: string[] = [],
     evalCriteria: EvalCriteria | null = null,
+    latestFrozenEvidenceDir: string | null = null,
+    allPriorFrozenEvidenceDirs: string[] = [],
+    repairDirectivePath: string | null = null,
   ): Promise<{ parsed: Record<string, unknown> | null; meta: { sessionId?: string } }> {
-    const context = createPromptContext(this.config, runState, evalCriteria);
+    await this.assertFrozenEvidenceIntact(runState, latestFrozenEvidenceDir);
+
+    const context = createPromptContext(this.config, runState, this.capabilities, evalCriteria);
     const prompt = buildGeneratorPrompt(
       context,
       feature,
@@ -777,13 +1068,16 @@ export class HarnessRunner {
       runState.repairRound,
       previousEvalPath,
       allPriorEvalPaths,
+      latestFrozenEvidenceDir,
+      allPriorFrozenEvidenceDirs,
+      repairDirectivePath,
     );
 
     const resumeSessionId = runState.repairRound > 0
       ? runState.generatorSessionIds[runState.sprint]
       : undefined;
 
-    return this.runTask(
+    const result = await this.runTask(
       runState,
       {
         kind: 'generator',
@@ -801,6 +1095,9 @@ export class HarnessRunner {
       },
       this.generatorLogName(runState.sprint, runState.repairRound),
     );
+
+    await this.assertFrozenEvidenceIntact(runState, latestFrozenEvidenceDir);
+    return result;
   }
 
   private async runEvaluator(
@@ -808,10 +1105,27 @@ export class HarnessRunner {
     feature: Feature,
     evaluationRound: number,
     evalCriteria: EvalCriteria | null,
+    devSmoke: {
+      required: boolean;
+      ok: boolean;
+      logPath: string | null;
+      url: string | null;
+    },
     devServerUrl?: string | null,
+    previousVerdictPath?: string | null,
   ): Promise<{ parsed: Record<string, unknown> | null }> {
-    const context = createPromptContext(this.config, runState, evalCriteria);
-    const prompt = buildEvaluatorPrompt(context, feature, runState.sprint, evaluationRound, devServerUrl);
+    await ensureDir(this.evidenceDir(runState.sprint, evaluationRound, runState.runDir));
+    const context = createPromptContext(this.config, runState, this.capabilities, evalCriteria);
+    const prompt = buildEvaluatorPrompt(
+      context,
+      feature,
+      runState.sprint,
+      evaluationRound,
+      this.capabilities.evaluator,
+      devSmoke,
+      devServerUrl,
+      previousVerdictPath,
+    );
     return this.runTask(
       runState,
       {
@@ -823,7 +1137,10 @@ export class HarnessRunner {
         evaluationRound,
         feature,
         devServerUrl: devServerUrl ?? undefined,
-        artifacts: { eval: runState.currentEvalPath! },
+        artifacts: {
+          eval: runState.currentEvalPath!,
+          evalJson: runState.currentEvalJsonPath!,
+        },
       },
       this.evaluatorLogName(runState.sprint, evaluationRound),
     );
@@ -833,33 +1150,32 @@ export class HarnessRunner {
     runState: RunState,
     feature: Feature,
     evaluationRound: number,
+    failureKind: 'dev-smoke' | 'smoke-test',
     smokeLogPath: string,
+    url: string | null,
   ): Promise<{ parsed: Record<string, unknown> | null }> {
     const relativeLogPath = relativeTo(runState.runDir, smokeLogPath);
     const report = [
       `# Sprint ${runState.sprint} Evaluation Round ${evaluationRound}`,
       '',
-      '## Verdict',
-      'fail',
-      '',
       '## Scorecard',
-      '- Smoke test failed before evaluator execution.',
+      `- ${failureKind} failed before evaluator execution.`,
       '',
       '## Contract Criteria Check',
-      '- Not fully evaluated because smoke test failed.',
+      `- Not fully evaluated because ${failureKind} failed.`,
       '',
       '## Project Principles Check',
-      '- Not fully evaluated because smoke test failed.',
+      `- Not fully evaluated because ${failureKind} failed.`,
       '',
       '## Bugs',
       `- severity: high`,
-      `- title: smoke test failed`,
-      `- repro: run ${this.config.smoke.test}`,
-      `- expected: smoke test exits 0`,
-      `- actual: smoke test failed; see ${relativeLogPath}`,
+      `- title: ${failureKind} failed`,
+      `- repro: inspect ${relativeLogPath}`,
+      `- expected: ${failureKind} succeeds before evaluator execution`,
+      `- actual: ${failureKind} failed; see ${relativeLogPath}`,
       '',
       '## Suggested Repair Plan',
-      '- Fix the failing smoke test before the next evaluation round.',
+      `- Fix the failing ${failureKind} before the next evaluation round.`,
       '',
       '## Notes',
       `- Feature: ${feature.id} ${feature.title}`,
@@ -869,17 +1185,58 @@ export class HarnessRunner {
     await writeText(runState.currentEvalPath!, report);
 
     const parsed = {
-      status: 'fail',
-      summary: 'Smoke test failed before evaluator execution.',
+      confidence: 'high',
+      evidenceQuality: 'adequate',
+      summary: `${failureKind} failed before evaluator execution.`,
       bugs: [
         {
           severity: 'high',
-          title: 'smoke test failed',
+          title: `${failureKind} failed`,
           evidence: [relativeLogPath],
         },
       ],
-      filesWritten: [runState.currentEvalPath!, smokeLogPath],
+      filesWritten: [runState.currentEvalPath!, runState.currentEvalJsonPath!, smokeLogPath],
     };
+
+    const canonicalEval: CanonicalEvaluation = {
+      version: 1,
+      sprint: runState.sprint,
+      evaluationRound,
+      feature: {
+        id: feature.id,
+        title: feature.title,
+      },
+      confidence: 'high',
+      evidenceQuality: 'adequate',
+      summary: `${failureKind} failed before evaluator execution.`,
+      scores: {},
+      contractCriteria: [],
+      projectPrinciples: [],
+      bugs: [
+        {
+          severity: 'high',
+          title: `${failureKind} failed`,
+          repro: `Inspect ${relativeLogPath}`,
+          expected: `${failureKind} succeeds before evaluator execution`,
+          actual: `${failureKind} failed. See ${relativeLogPath}`,
+          evidence: [relativeLogPath],
+          rootCause: `Harness-side ${failureKind} check failed before evaluator execution.`,
+          previousFixFailure: null,
+        },
+      ],
+      suggestedRepairPlan: [`Fix the failing ${failureKind} before the next evaluation round.`],
+      notes: [`Evidence: ${relativeLogPath}`],
+      sourceMarkdownPath: runState.currentEvalPath!,
+      devSmoke: {
+        required: failureKind === 'dev-smoke',
+        ok: false,
+        logPath: relativeLogPath,
+        url,
+      },
+    };
+    await writeJson(runState.currentEvalJsonPath!, canonicalEval);
+    this.recordEvaluatorConfidence('high', runState);
+    this.recordEvidenceQuality('adequate', runState);
 
     await this.persistSyntheticTaskResult(
       runState,
@@ -892,26 +1249,164 @@ export class HarnessRunner {
     return { parsed };
   }
 
+  // ---------- Verdict & repair directive ----------
+
+  private getEffectivePassBarOverrides(runState: RunState): Record<string, number> {
+    return runState.currentNegotiation?.passBarOverrides ?? {};
+  }
+
+  private verdictPath(sprint: number, evaluationRound: number, runDir: string): string {
+    return path.join(
+      runDir,
+      'verdicts',
+      `verdict-${String(sprint).padStart(2, '0')}-r${String(evaluationRound).padStart(2, '0')}.json`,
+    );
+  }
+
+  private repairDirectivePath(sprint: number, evaluationRound: number, runDir: string): string {
+    return path.join(
+      runDir,
+      'repair-directives',
+      `repair-s${String(sprint).padStart(2, '0')}-r${String(evaluationRound).padStart(2, '0')}.json`,
+    );
+  }
+
+  private async writeVerdict(
+    runState: RunState,
+    evaluationRound: number,
+    evalParsed: Record<string, unknown> | null,
+    evalCriteria: EvalCriteria | null,
+    isSmokeFailure: boolean,
+  ): Promise<HarnessVerdict> {
+    const overrides = this.getEffectivePassBarOverrides(runState);
+    const passed = resolvePass(evalParsed, evalCriteria, overrides);
+    const failing = getFailingScores(evalParsed, evalCriteria, overrides);
+    const passing = getPassingScores(evalParsed, evalCriteria, overrides);
+
+    let reason: HarnessVerdict['reason'];
+    if (isSmokeFailure) {
+      reason = 'smoke_failure';
+    } else if (passed) {
+      reason = 'all_scores_met';
+    } else if (!evalParsed || !isPlainObject(evalParsed.scores)) {
+      reason = 'missing_scores';
+    } else {
+      reason = 'score_below_threshold';
+    }
+
+    const verdict: HarnessVerdict = {
+      version: 1,
+      sprint: runState.sprint,
+      evaluationRound,
+      featureId: runState.currentFeatureId!,
+      passed,
+      reason,
+      failingScores: failing,
+      passingScores: passing,
+      evaluationJsonPath: runState.currentEvalJsonPath!,
+    };
+
+    const verdictFilePath = this.verdictPath(runState.sprint, evaluationRound, runState.runDir);
+    await writeJson(verdictFilePath, verdict);
+    runState.currentVerdictPath = verdictFilePath;
+    await this.saveRunState(runState);
+    return verdict;
+  }
+
+  private lookupRubricDescription(
+    criterion: string,
+    scoreLevel: number,
+    evalCriteria: EvalCriteria | null,
+  ): string {
+    if (!evalCriteria) return '';
+    const pc = evalCriteria.projectCriteria.find((c) => c.id === criterion);
+    if (pc) {
+      return pc.rubric[String(scoreLevel)] || '';
+    }
+    const universal = UNIVERSAL_RUBRICS[criterion];
+    if (universal) {
+      return universal.anchors[String(scoreLevel)] || '';
+    }
+    return '';
+  }
+
+  private async writeRepairDirective(
+    runState: RunState,
+    evaluationRound: number,
+    verdict: HarnessVerdict,
+    evalCriteria: EvalCriteria | null,
+    evidenceDir: string | null,
+  ): Promise<string> {
+    const canonicalEval = await this.readCanonicalEvaluation(runState.currentEvalJsonPath!);
+
+    const failingCriteria: RepairDirectiveCriterion[] = verdict.failingScores.map((f) => ({
+      criterion: f.criterion,
+      currentScore: f.score,
+      effectivePassBar: f.passBar,
+      targetLevelDescription: this.lookupRubricDescription(f.criterion, f.passBar, evalCriteria),
+      currentLevelDescription: this.lookupRubricDescription(f.criterion, f.score, evalCriteria),
+    }));
+    failingCriteria.sort((a, b) => (b.effectivePassBar - b.currentScore) - (a.effectivePassBar - a.currentScore));
+
+    const mustFixBugs = canonicalEval.bugs
+      .filter((b) => b.severity === 'high' || b.severity === 'critical')
+      .map((b) => ({
+        severity: b.severity,
+        title: b.title,
+        rootCause: b.rootCause,
+        evidence: b.evidence,
+      }));
+
+    const directive: RepairDirective = {
+      version: 1,
+      sprint: runState.sprint,
+      evaluationRound,
+      featureId: runState.currentFeatureId!,
+      verdictPath: runState.currentVerdictPath!,
+      failingCriteria,
+      passingCriteria: verdict.passingScores.map((p) => ({
+        criterion: p.criterion,
+        currentScore: p.score,
+        effectivePassBar: p.passBar,
+      })),
+      mustFixBugs,
+      evaluationPath: runState.currentEvalPath!,
+      evaluationJsonPath: runState.currentEvalJsonPath!,
+      evidenceDir,
+      remainingRounds: this.config.maxRepairRounds - evaluationRound,
+    };
+
+    const directivePath = this.repairDirectivePath(runState.sprint, evaluationRound, runState.runDir);
+    await writeJson(directivePath, directive);
+    return directivePath;
+  }
+
   // ---------- Task execution ----------
 
   private async runTask(
     runState: RunState,
-    task: Parameters<typeof this.provider.runTask>[0],
+    task: Parameters<typeof this.providerRegistry.runTask>[0],
     logName: string,
   ): Promise<{ parsed: Record<string, unknown> | null; meta: { sessionId?: string } }> {
+    const capabilities = task.capabilities || this.capabilities[task.kind];
     const startedAt = nowIso();
+    this.recordTaskStart(task.kind, capabilities.provider, runState);
     await this.log(runState, {
       type: 'task.start',
       task: task.kind,
       label: task.label,
+      provider: capabilities.provider,
       startedAt,
       sprint: runState.sprint,
       repairRound: runState.repairRound,
       currentFeatureId: runState.currentFeatureId,
     });
 
-    this.output.log(`→ ${task.label}`);
-    const result = await this.provider.runTask(task);
+    this.output.log(`→ ${task.label} [${capabilities.provider}]`);
+    const result = await this.providerRegistry.runTask({
+      ...task,
+      capabilities,
+    });
 
     const rawPath = path.join(runState.runDir, 'logs', `${logName}.raw.txt`);
     await writeText(rawPath, `${result.rawText || ''}\n`);
@@ -920,11 +1415,22 @@ export class HarnessRunner {
     if (result.parsed) {
       await writeJson(parsedPath, result.parsed);
     }
+    this.recordTaskFinish(task.kind, capabilities.provider, runState);
+
+    await this.assertTaskArtifactsExist(task);
+
+    const parseSucceeded = !!result.parsed;
+    if (parseSucceeded) {
+      this.recordParseSuccess(task.kind, capabilities.provider, runState);
+    } else {
+      this.recordParseFailure(task.kind, capabilities.provider, runState);
+    }
 
     await this.log(runState, {
       type: 'task.finish',
       task: task.kind,
       label: task.label,
+      provider: capabilities.provider,
       finishedAt: nowIso(),
       rawLog: relativeTo(runState.runDir, rawPath),
       parsedLog: result.parsed ? relativeTo(runState.runDir, parsedPath) : null,
@@ -934,7 +1440,12 @@ export class HarnessRunner {
     });
 
     if (!result.parsed) {
-      if (task.kind === 'generator') {
+      const recovered = await this.recoverTaskResultFromArtifacts(runState, task, parsedPath);
+      if (recovered) {
+        result.parsed = recovered;
+        await writeJson(parsedPath, result.parsed);
+        this.output.log(`⚠ ${task.label} did not return JSON — recovered from canonical artifacts.`);
+      } else if (task.kind === 'generator') {
         // Generators sometimes produce prose-only output (especially during repair rounds).
         // Synthesize a minimal result so the evaluator can judge the actual workspace state.
         result.parsed = {
@@ -955,7 +1466,23 @@ export class HarnessRunner {
       }
     }
 
+    if (task.label.startsWith('contract-draft')) {
+      await this.readCanonicalContract(runState.currentContractJsonPath!);
+    }
+
+    if (task.kind === 'evaluator' && !task.label.startsWith('contract-review')) {
+      const canonicalEval = await this.readCanonicalEvaluation(runState.currentEvalJsonPath!);
+      result.parsed = {
+        ...(result.parsed || {}),
+        ...canonicalEval,
+      };
+      this.recordEvaluatorConfidence(canonicalEval.confidence, runState);
+      this.recordEvidenceQuality(canonicalEval.evidenceQuality, runState);
+      await writeJson(parsedPath, result.parsed);
+    }
+
     this.output.log(`✓ ${task.label} — ${truncate((result.parsed.summary as string) || result.rawText, 120)}`);
+    await this.saveRunState(runState);
     return { parsed: result.parsed, meta: result.meta };
   }
 
@@ -1000,6 +1527,281 @@ export class HarnessRunner {
     return extractJsonObject(await readText(rawPath, ''));
   }
 
+  private async assertTaskArtifactsExist(task: Parameters<typeof this.providerRegistry.runTask>[0]): Promise<void> {
+    const missing: string[] = [];
+    for (const artifactPath of Object.values(task.artifacts || {})) {
+      if (!(await fileExists(artifactPath))) {
+        missing.push(artifactPath);
+      }
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        `${task.label} did not write expected artifacts:\n${missing.map((artifactPath) => `- ${artifactPath}`).join('\n')}`,
+      );
+    }
+  }
+
+  private async recoverTaskResultFromArtifacts(
+    runState: RunState,
+    task: Parameters<typeof this.providerRegistry.runTask>[0],
+    parsedPath: string,
+  ): Promise<Record<string, unknown> | null> {
+    if (task.kind === 'evaluator' && runState.currentEvalJsonPath && (await fileExists(runState.currentEvalJsonPath))) {
+      return this.readCanonicalEvaluation(runState.currentEvalJsonPath) as unknown as Record<string, unknown>;
+    }
+
+    if (
+      task.label.startsWith('contract-draft') &&
+      runState.currentContractJsonPath &&
+      (await fileExists(runState.currentContractJsonPath))
+    ) {
+      await this.readCanonicalContract(runState.currentContractJsonPath);
+      return {
+        status: 'ok',
+        summary: 'Recovered from canonical contract artifact.',
+        filesWritten: [runState.currentContractPath, runState.currentContractJsonPath].filter(Boolean),
+      };
+    }
+
+    if (task.kind === 'researcher' || task.kind === 'planner') {
+      return {
+        status: 'ok',
+        summary: 'Recovered from written planning artifacts.',
+        filesWritten: Object.values(task.artifacts),
+        parsedLog: parsedPath,
+      };
+    }
+
+    return null;
+  }
+
+  private async readCanonicalContract(filePath: string): Promise<CanonicalContract> {
+    const value = await readJson<CanonicalContract | null>(filePath, null);
+    if (
+      !value ||
+      value.version !== 1 ||
+      !value.feature?.id ||
+      !Array.isArray(value.doneMeans) ||
+      !Array.isArray(value.verificationSteps) ||
+      !Array.isArray(value.hardThresholds) ||
+      typeof value.sourceMarkdownPath !== 'string'
+    ) {
+      throw new Error(`Invalid canonical contract JSON: ${filePath}`);
+    }
+    return value;
+  }
+
+  private async readCanonicalEvaluation(filePath: string): Promise<CanonicalEvaluation> {
+    const value = await readJson<CanonicalEvaluation | null>(filePath, null);
+    if (
+      !value ||
+      value.version !== 1 ||
+      !isConfidenceLevel(value.confidence) ||
+      !isEvidenceQuality(value.evidenceQuality) ||
+      typeof value.summary !== 'string' ||
+      !value.feature?.id ||
+      !isPlainRecord(value.scores) ||
+      !Array.isArray(value.contractCriteria) ||
+      !Array.isArray(value.projectPrinciples) ||
+      !Array.isArray(value.bugs) ||
+      !Array.isArray(value.suggestedRepairPlan) ||
+      !Array.isArray(value.notes) ||
+      !value.devSmoke
+    ) {
+      throw new Error(`Invalid canonical evaluation JSON: ${filePath}`);
+    }
+    return value;
+  }
+
+  private async freezeEvaluatorEvidence(
+    runState: RunState,
+    evaluationRound: number,
+  ): Promise<string | null> {
+    const liveEvidenceDir = this.evidenceDir(runState.sprint, evaluationRound, runState.runDir);
+    if (!(await fileExists(liveEvidenceDir))) {
+      return null;
+    }
+
+    const frozenDir = this.frozenEvidenceDir(runState.sprint, evaluationRound, runState.runDir);
+    await fs.rm(frozenDir, { recursive: true, force: true });
+    await copyTree(liveEvidenceDir, frozenDir);
+
+    const frozenFiles = await listFilesRecursive(frozenDir);
+    const manifest = {
+      version: 1,
+      sourceDir: relativeTo(runState.runDir, liveEvidenceDir),
+      frozenDir: relativeTo(runState.runDir, frozenDir),
+      files: await Promise.all(
+        frozenFiles.map(async (filePath) => ({
+          path: relativeTo(frozenDir, filePath),
+          sha256: await hashFile(filePath),
+        })),
+      ),
+    };
+    await writeJson(this.frozenEvidenceManifestPath(frozenDir), manifest);
+    await this.log(runState, {
+      type: 'evidence.freeze',
+      sourceDir: manifest.sourceDir,
+      frozenDir: manifest.frozenDir,
+      files: manifest.files.length,
+    });
+    return frozenDir;
+  }
+
+  private async assertFrozenEvidenceIntact(runState: RunState, frozenEvidenceDir: string | null): Promise<void> {
+    if (!frozenEvidenceDir) return;
+
+    const manifestPath = this.frozenEvidenceManifestPath(frozenEvidenceDir);
+    if (!(await fileExists(manifestPath))) {
+      throw new Error(`Missing frozen evidence manifest: ${manifestPath}`);
+    }
+
+    const manifest = await readJson<{
+      files: Array<{ path: string; sha256: string }>;
+    } | null>(manifestPath, null);
+
+    if (!manifest) {
+      throw new Error(`Invalid frozen evidence manifest: ${manifestPath}`);
+    }
+
+    const changedFiles: string[] = [];
+    for (const entry of manifest.files) {
+      const absolutePath = path.join(frozenEvidenceDir, entry.path);
+      if (!(await fileExists(absolutePath))) {
+        changedFiles.push(entry.path);
+        continue;
+      }
+      const sha256 = await hashFile(absolutePath);
+      if (sha256 !== entry.sha256) {
+        changedFiles.push(entry.path);
+      }
+    }
+
+    if (changedFiles.length > 0) {
+      await this.log(runState, {
+        type: 'evidence.tamper',
+        frozenDir: relativeTo(runState.runDir, frozenEvidenceDir),
+        changedFiles,
+      });
+      throw new Error(
+        `Frozen evaluator evidence was modified and can no longer be trusted:\n${changedFiles.map((entry) => `- ${entry}`).join('\n')}`,
+      );
+    }
+  }
+
+  private async freezeBenchmarkArtifacts(
+    runState: RunState,
+    label: string,
+    artifactPaths: string[],
+  ): Promise<void> {
+    if (!this.shouldFreezeBenchmarkArtifacts()) {
+      return;
+    }
+
+    const existingArtifacts = Array.from(new Set(artifactPaths)).filter(Boolean);
+    const manifestPath = this.benchmarkManifestPath(runState.runDir);
+    const currentManifest = await readJson<{
+      version: number;
+      roleProviders: RoleProviderMap;
+      snapshots: Array<Record<string, unknown>>;
+    } | null>(manifestPath, null);
+
+    const snapshot = {
+      label,
+      frozenAt: nowIso(),
+      artifacts: [] as Array<Record<string, unknown>>,
+    };
+
+    for (const artifactPath of existingArtifacts) {
+      if (!(await fileExists(artifactPath))) continue;
+
+      const relativeArtifactPath = relativeTo(runState.runDir, artifactPath);
+      const destinationPath = path.join(runState.runDir, 'benchmarks', 'frozen', label, relativeArtifactPath);
+      await fs.rm(destinationPath, { recursive: true, force: true });
+      await copyTree(artifactPath, destinationPath);
+
+      const stats = await fs.stat(destinationPath);
+      const fileEntries = stats.isDirectory()
+        ? await listFilesRecursive(destinationPath)
+        : [destinationPath];
+
+      snapshot.artifacts.push({
+        sourcePath: relativeArtifactPath,
+        frozenPath: relativeTo(runState.runDir, destinationPath),
+        kind: stats.isDirectory() ? 'directory' : 'file',
+        files: await Promise.all(
+          fileEntries.map(async (filePath) => ({
+            path: relativeTo(destinationPath, filePath),
+            sha256: await hashFile(filePath),
+          })),
+        ),
+      });
+    }
+
+    const nextManifest = currentManifest || {
+      version: 1,
+      roleProviders: { ...this.roleProviders },
+      snapshots: [],
+    };
+    nextManifest.snapshots.push(snapshot);
+    await writeJson(manifestPath, nextManifest);
+  }
+
+  private async runFinalRegression(runState: RunState): Promise<void> {
+    if (!this.config.smoke.start && !this.config.smoke.test) {
+      return;
+    }
+
+    let devServer: DevServer | null = null;
+
+    try {
+      devServer = await this.startDevServer(runState);
+
+      if (devServer?.getUrl()) {
+        const devSmoke = await this.runDevServerSmoke(runState, runState.sprint, this.config.maxRepairRounds + 1, devServer.getUrl()!);
+        if (!devSmoke.ok) {
+          this.recordFinalRegressionFailure(runState);
+          runState.status = 'failed';
+          runState.summary = 'Backlog completed, but final regression failed the dev-server smoke.';
+          await this.saveRunState(runState);
+          return;
+        }
+      }
+
+      if (this.config.smoke.test) {
+        const result = await this.runShellCommand(this.config.smoke.test, this.config.workspace);
+        const logPath = path.join(runState.runDir, 'logs', 'final-regression-smoke-test.log');
+        await writeText(logPath, formatCommandResult(this.config.smoke.test, result));
+        await this.log(runState, {
+          type: 'run.final_regression',
+          ok: result.ok,
+          logPath: relativeTo(runState.runDir, logPath),
+        });
+        if (!result.ok) {
+          this.recordFinalRegressionFailure(runState);
+          runState.status = 'failed';
+          runState.summary = 'Backlog completed, but final regression smoke failed.';
+          await this.saveRunState(runState);
+          return;
+        }
+      }
+
+      await this.log(runState, { type: 'run.final_regression', ok: true });
+    } catch (error) {
+      this.recordFinalRegressionFailure(runState);
+      runState.status = 'failed';
+      runState.summary = `Backlog completed, but final regression failed: ${String(error instanceof Error ? error.message : error)}`;
+      await this.log(runState, {
+        type: 'run.final_regression',
+        ok: false,
+        error: runState.summary,
+      });
+      await this.saveRunState(runState);
+    } finally {
+      await this.stopDevServer(runState, devServer);
+    }
+  }
+
   // ---------- Command helpers ----------
 
   private async runShellCommand(command: string, cwd: string): Promise<ShellCommandResult> {
@@ -1017,11 +1819,129 @@ export class HarnessRunner {
     }
   }
 
+  // ---------- Metrics / routing helpers ----------
+
+  private createInitialMetrics(): RunState['metrics'] {
+    return {
+      completedFeatures: 0,
+      blockedFeatures: 0,
+      finalRegressionFailures: 0,
+      rolePerformance: {},
+    };
+  }
+
+  private providerSummary(): string {
+    const uniqueProviders = Array.from(new Set(Object.values(this.roleProviders)));
+    if (uniqueProviders.length === 1) {
+      return uniqueProviders[0];
+    }
+    return (Object.entries(this.roleProviders) as Array<[keyof RoleProviderMap, string]>)
+      .map(([role, provider]) => `${role}:${provider}`)
+      .join(', ');
+  }
+
+  private shouldFreezeBenchmarkArtifacts(): boolean {
+    return new Set(Object.values(this.roleProviders)).size > 1;
+  }
+
+  private roleMetricKey(role: keyof RoleProviderMap, provider: TaskCapabilities['provider']): string {
+    return `${role}@${provider}`;
+  }
+
+  private ensureRoleMetric(
+    role: keyof RoleProviderMap,
+    provider: TaskCapabilities['provider'],
+    runState: RunState,
+  ): RunState['metrics']['rolePerformance'][string] {
+    const key = this.roleMetricKey(role, provider);
+    if (!runState.metrics.rolePerformance[key]) {
+      runState.metrics.rolePerformance[key] = {
+        role,
+        provider,
+        tasksStarted: 0,
+        tasksFinished: 0,
+        parseSuccesses: 0,
+        parseFailures: 0,
+        contractApprovalAttempts: 0,
+        contractApprovalPasses: 0,
+        repairRoundsToPass: [],
+        finalRegressionFailures: 0,
+        devSmokePassed: 0,
+        devSmokeFailed: 0,
+        evaluatorConfidence: { low: 0, medium: 0, high: 0, unknown: 0 },
+        evidenceQuality: { weak: 0, adequate: 0, strong: 0, unknown: 0 },
+      };
+    }
+    return runState.metrics.rolePerformance[key];
+  }
+
+  private recordTaskStart(role: keyof RoleProviderMap, provider: TaskCapabilities['provider'], runState: RunState): void {
+    this.ensureRoleMetric(role, provider, runState).tasksStarted += 1;
+  }
+
+  private recordTaskFinish(role: keyof RoleProviderMap, provider: TaskCapabilities['provider'], runState: RunState): void {
+    this.ensureRoleMetric(role, provider, runState).tasksFinished += 1;
+  }
+
+  private recordParseSuccess(role: keyof RoleProviderMap, provider: TaskCapabilities['provider'], runState: RunState): void {
+    this.ensureRoleMetric(role, provider, runState).parseSuccesses += 1;
+  }
+
+  private recordParseFailure(role: keyof RoleProviderMap, provider: TaskCapabilities['provider'], runState: RunState): void {
+    this.ensureRoleMetric(role, provider, runState).parseFailures += 1;
+  }
+
+  private recordContractApprovalAttempt(role: keyof RoleProviderMap, runState: RunState): void {
+    const provider = this.providerRegistry.getProviderName(role);
+    this.ensureRoleMetric(role, provider, runState).contractApprovalAttempts += 1;
+  }
+
+  private recordContractApprovalPass(role: keyof RoleProviderMap, runState: RunState): void {
+    const provider = this.providerRegistry.getProviderName(role);
+    this.ensureRoleMetric(role, provider, runState).contractApprovalPasses += 1;
+  }
+
+  private recordRepairRoundsToPass(role: keyof RoleProviderMap, repairRounds: number, runState: RunState): void {
+    const provider = this.providerRegistry.getProviderName(role);
+    this.ensureRoleMetric(role, provider, runState).repairRoundsToPass.push(repairRounds);
+  }
+
+  private recordDevSmokeResult(ok: boolean, runState: RunState): void {
+    const provider = this.providerRegistry.getProviderName('evaluator');
+    const metric = this.ensureRoleMetric('evaluator', provider, runState);
+    if (ok) {
+      metric.devSmokePassed += 1;
+    } else {
+      metric.devSmokeFailed += 1;
+    }
+  }
+
+  private recordEvaluatorConfidence(confidence: ConfidenceLevel, runState: RunState): void {
+    const provider = this.providerRegistry.getProviderName('evaluator');
+    const metric = this.ensureRoleMetric('evaluator', provider, runState);
+    metric.evaluatorConfidence[confidence] += 1;
+  }
+
+  private recordEvidenceQuality(quality: EvidenceQuality, runState: RunState): void {
+    const provider = this.providerRegistry.getProviderName('evaluator');
+    const metric = this.ensureRoleMetric('evaluator', provider, runState);
+    metric.evidenceQuality[quality] += 1;
+  }
+
+  private recordFinalRegressionFailure(runState: RunState): void {
+    runState.metrics.finalRegressionFailures += 1;
+    const provider = this.providerRegistry.getProviderName('generator');
+    this.ensureRoleMetric('generator', provider, runState).finalRegressionFailures += 1;
+  }
+
   // ---------- Persistence ----------
 
   private async saveRunState(runState: RunState): Promise<void> {
     runState.updatedAt = nowIso();
-    await writeJson(path.join(runState.runDir, 'run.json'), runState);
+    await Promise.all([
+      writeJson(path.join(runState.runDir, 'run.json'), runState),
+      writeJson(path.join(runState.runDir, 'metrics.json'), runState.metrics),
+    ]);
   }
 
   private async log(runState: RunState, entry: Record<string, unknown>): Promise<void> {
@@ -1038,6 +1958,7 @@ export class HarnessRunner {
       projectPrinciples: path.join(runState.runDir, 'plan', 'project-principles.md'),
       progress: path.join(runState.runDir, 'progress.md'),
       nextHandoff: path.join(runState.runDir, 'handoff', 'next.md'),
+      benchmarkManifest: this.benchmarkManifestPath(runState.runDir),
     };
   }
 
@@ -1053,8 +1974,32 @@ export class HarnessRunner {
     return path.join(runDir, 'contracts', `contract-${this.sprintPad(sprintNumber)}.md`);
   }
 
+  private contractJsonPath(sprintNumber: number, runDir: string): string {
+    return path.join(runDir, 'contracts', `contract-${this.sprintPad(sprintNumber)}.json`);
+  }
+
   private evalPath(sprintNumber: number, round: number, runDir: string): string {
     return path.join(runDir, 'evals', `eval-${this.sprintPad(sprintNumber)}-r${this.roundPad(round)}.md`);
+  }
+
+  private evalJsonPath(sprintNumber: number, round: number, runDir: string): string {
+    return path.join(runDir, 'evals', `eval-${this.sprintPad(sprintNumber)}-r${this.roundPad(round)}.json`);
+  }
+
+  private evidenceDir(sprintNumber: number, round: number, runDir: string): string {
+    return path.join(runDir, 'evals', 'evidence', `s${this.sprintPad(sprintNumber)}-r${this.roundPad(round)}`);
+  }
+
+  private frozenEvidenceDir(sprintNumber: number, round: number, runDir: string): string {
+    return path.join(runDir, 'evals', 'evidence-frozen', `s${this.sprintPad(sprintNumber)}-r${this.roundPad(round)}`);
+  }
+
+  private frozenEvidenceManifestPath(frozenEvidenceDir: string): string {
+    return path.join(frozenEvidenceDir, 'manifest.json');
+  }
+
+  private benchmarkManifestPath(runDir: string): string {
+    return path.join(runDir, 'benchmarks', 'frozen', 'manifest.json');
   }
 
   private generatorLogName(sprintNumber: number, round: number): string {
@@ -1077,4 +2022,16 @@ function formatCommandResult(command: string, result: ShellCommandResult): strin
     result.stderr ? `stderr:\n${result.stderr}` : 'stderr:\n',
     '',
   ].join('\n');
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isConfidenceLevel(value: unknown): value is ConfidenceLevel {
+  return value === 'low' || value === 'medium' || value === 'high';
+}
+
+function isEvidenceQuality(value: unknown): value is EvidenceQuality {
+  return value === 'weak' || value === 'adequate' || value === 'strong';
 }

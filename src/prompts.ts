@@ -51,7 +51,7 @@ export const SYSTEM_PROMPTS = {
 // project-specific criteria refine.
 // ---------------------------------------------------------------------------
 
-const UNIVERSAL_RUBRICS: Record<string, { label: string; description: string; anchors: Record<string, string> }> = {
+export const UNIVERSAL_RUBRICS: Record<string, { label: string; description: string; anchors: Record<string, string> }> = {
   conceptAlignment: {
     label: 'Concept Alignment',
     description: 'Does the output match the user\'s actual intent, including domain-specific meaning?',
