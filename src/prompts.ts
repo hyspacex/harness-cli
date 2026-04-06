@@ -610,7 +610,7 @@ export function buildGeneratorPrompt(
   allPriorEvalPaths: string[] = [],
   latestFrozenEvidenceDir: string | null = null,
   allPriorFrozenEvidenceDirs: string[] = [],
-  failingScores: { criterion: string; score: number; passBar: number }[] = [],
+  repairDirectivePath: string | null = null,
 ): string {
   const commitInstruction = context.config.git.autoCommit
     ? `Create exactly one git commit when the sprint work is done. Use the message: sprint ${sprintNumber}: ${feature.id} ${feature.title}`
@@ -618,21 +618,17 @@ export function buildGeneratorPrompt(
 
   const smokeSection = smokeBlock(context.config.smoke, 'Smoke commands');
 
-  const failingScoresNote = failingScores.length > 0
-    ? `\nCRITICAL — The harness rejected the previous evaluation because these scores are below their pass bars:
-${failingScores.map((f) => `- ${f.criterion}: scored ${f.score}, needs >= ${f.passBar}`).join('\n')}
-
-This is the PRIMARY reason this repair round exists. The evaluator may have said "pass" in its report,
-but the harness independently checks all scores against thresholds. You MUST focus on raising these
-scores above their pass bars. Cosmetic fixes will not help if these criteria remain unmet.
-Read the rubric for each failing criterion in the contract JSON to understand what the next score
-level requires, then implement those specific capabilities.
+  const repairDirectiveNote = repairDirectivePath
+    ? `\nCRITICAL — Read the repair directive: ${repairDirectivePath}
+It lists every criterion that must improve, with rubric descriptions of your current
+level and the target level. Focus on the largest gaps first. Do not regress passing criteria.
+The repair directive is the authoritative source for why this repair round exists.
 `
     : '';
 
   const repairNote = repairRound > 0
     ? `\nThis is repair round ${repairRound}. Read the previous evaluation report carefully and fix every issue it identified.
-${failingScoresNote}
+${repairDirectiveNote}
 IMPORTANT — Evidence-based repair:
 - The evaluator's evidence snapshot is frozen at: ${latestFrozenEvidenceDir || '(no frozen evidence snapshot found)'}
   Read these files (including images) to SEE what the evaluator saw. The evaluator has
