@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import type { Backlog, EvalCriteria, Feature } from './types.js';
 
 export function nowIso(): string {
@@ -57,6 +58,35 @@ export async function readJson<T>(filePath: string, fallback: T): Promise<T> {
 
 export async function writeJson(filePath: string, data: unknown): Promise<void> {
   await writeText(filePath, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+export async function copyTree(sourcePath: string, destinationPath: string): Promise<void> {
+  await ensureDir(path.dirname(destinationPath));
+  await fs.cp(sourcePath, destinationPath, { recursive: true, force: true });
+}
+
+export async function hashFile(filePath: string): Promise<string> {
+  const content = await fs.readFile(filePath);
+  return createHash('sha256').update(content).digest('hex');
+}
+
+export async function listFilesRecursive(rootPath: string): Promise<string[]> {
+  if (!(await fileExists(rootPath))) {
+    return [];
+  }
+
+  const entries = await fs.readdir(rootPath, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(rootPath, entry.name);
+      if (entry.isDirectory()) {
+        return listFilesRecursive(entryPath);
+      }
+      return [entryPath];
+    }),
+  );
+
+  return files.flat().sort();
 }
 
 export async function appendNdjson(filePath: string, entry: Record<string, unknown>): Promise<void> {
@@ -184,37 +214,96 @@ export function getNextPendingFeature(backlog: Backlog): Feature | null {
 export function resolvePass(
   parsedEval: Record<string, unknown> | null,
   criteria: EvalCriteria | null,
+  passBarOverrides: Record<string, number> = {},
 ): boolean {
   if (!parsedEval) return false;
-
-  if (typeof parsedEval.status === 'string' && parsedEval.status.toLowerCase() === 'fail') {
-    return false;
-  }
+  if (!criteria) return false;
 
   const scores = isPlainObject(parsedEval.scores)
     ? (parsedEval.scores as Record<string, unknown>)
     : null;
 
-  if (criteria) {
-    if (!scores) return false;
+  if (!scores) return false;
 
-    for (const [key, config] of Object.entries(criteria.universalCriteria)) {
-      const score = typeof scores[key] === 'number' ? (scores[key] as number) : null;
-      if (score === null || score < config.passBar) return false;
-    }
-
-    for (const pc of criteria.projectCriteria) {
-      const score = typeof scores[pc.id] === 'number' ? (scores[pc.id] as number) : null;
-      if (score === null || score < pc.passBar) return false;
-    }
-
-    return true;
+  for (const [key, config] of Object.entries(criteria.universalCriteria)) {
+    const effectiveBar = Math.min(passBarOverrides[key] ?? config.passBar, config.passBar);
+    const score = typeof scores[key] === 'number' ? (scores[key] as number) : null;
+    if (score === null || score < effectiveBar) return false;
   }
 
-  if (typeof parsedEval.status === 'string') {
-    return parsedEval.status.toLowerCase() === 'pass';
+  for (const pc of criteria.projectCriteria) {
+    const effectiveBar = Math.min(passBarOverrides[pc.id] ?? pc.passBar, pc.passBar);
+    const score = typeof scores[pc.id] === 'number' ? (scores[pc.id] as number) : null;
+    if (score === null || score < effectiveBar) return false;
   }
-  return false;
+
+  return true;
+}
+
+export function getFailingScores(
+  parsedEval: Record<string, unknown> | null,
+  criteria: EvalCriteria | null,
+  passBarOverrides: Record<string, number> = {},
+): { criterion: string; score: number; passBar: number }[] {
+  if (!parsedEval || !criteria) return [];
+
+  const scores = isPlainObject(parsedEval.scores)
+    ? (parsedEval.scores as Record<string, unknown>)
+    : null;
+  if (!scores) return [];
+
+  const failing: { criterion: string; score: number; passBar: number }[] = [];
+
+  for (const [key, config] of Object.entries(criteria.universalCriteria)) {
+    const effectiveBar = Math.min(passBarOverrides[key] ?? config.passBar, config.passBar);
+    const score = typeof scores[key] === 'number' ? (scores[key] as number) : null;
+    if (score === null || score < effectiveBar) {
+      failing.push({ criterion: key, score: score ?? 0, passBar: effectiveBar });
+    }
+  }
+
+  for (const pc of criteria.projectCriteria) {
+    const effectiveBar = Math.min(passBarOverrides[pc.id] ?? pc.passBar, pc.passBar);
+    const score = typeof scores[pc.id] === 'number' ? (scores[pc.id] as number) : null;
+    if (score === null || score < effectiveBar) {
+      failing.push({ criterion: pc.id, score: score ?? 0, passBar: effectiveBar });
+    }
+  }
+
+  return failing;
+}
+
+export function getPassingScores(
+  parsedEval: Record<string, unknown> | null,
+  criteria: EvalCriteria | null,
+  passBarOverrides: Record<string, number> = {},
+): { criterion: string; score: number; passBar: number }[] {
+  if (!parsedEval || !criteria) return [];
+
+  const scores = isPlainObject(parsedEval.scores)
+    ? (parsedEval.scores as Record<string, unknown>)
+    : null;
+  if (!scores) return [];
+
+  const passing: { criterion: string; score: number; passBar: number }[] = [];
+
+  for (const [key, config] of Object.entries(criteria.universalCriteria)) {
+    const effectiveBar = Math.min(passBarOverrides[key] ?? config.passBar, config.passBar);
+    const score = typeof scores[key] === 'number' ? (scores[key] as number) : null;
+    if (score !== null && score >= effectiveBar) {
+      passing.push({ criterion: key, score, passBar: effectiveBar });
+    }
+  }
+
+  for (const pc of criteria.projectCriteria) {
+    const effectiveBar = Math.min(passBarOverrides[pc.id] ?? pc.passBar, pc.passBar);
+    const score = typeof scores[pc.id] === 'number' ? (scores[pc.id] as number) : null;
+    if (score !== null && score >= effectiveBar) {
+      passing.push({ criterion: pc.id, score, passBar: effectiveBar });
+    }
+  }
+
+  return passing;
 }
 
 export function truncate(text: string, maxLength = 240): string {
