@@ -3,6 +3,9 @@
 export type ProviderName = 'claude-sdk' | 'codex';
 export type ApprovalPolicy = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
 export type AgentRole = 'researcher' | 'planner' | 'generator' | 'evaluator';
+export type ConfidenceLevel = 'low' | 'medium' | 'high';
+export type EvidenceQuality = 'weak' | 'adequate' | 'strong';
+export type RoleProviderMap = Record<AgentRole, ProviderName>;
 
 // ---- SDK configuration ----
 
@@ -89,6 +92,7 @@ export interface SkillsConfig {
 
 export interface HarnessConfig {
   provider: ProviderName;
+  roleProviders: RoleProviderMap;
   workspace: string;
   runRoot: string;
   maxSprints: number;
@@ -160,6 +164,46 @@ export interface NegotiationState {
   rounds: NegotiationRound[];
   finalContractPath: string | null;
   status: 'drafting' | 'reviewing' | 'approved' | 'exhausted';
+  /** Pass bar overrides negotiated for this sprint. Keyed by criterion id. */
+  passBarOverrides: Record<string, number>;
+}
+
+export interface ConfidenceCounts {
+  low: number;
+  medium: number;
+  high: number;
+  unknown: number;
+}
+
+export interface EvidenceQualityCounts {
+  weak: number;
+  adequate: number;
+  strong: number;
+  unknown: number;
+}
+
+export interface RoleProviderPerformanceMetrics {
+  role: AgentRole;
+  provider: ProviderName;
+  tasksStarted: number;
+  tasksFinished: number;
+  parseSuccesses: number;
+  parseFailures: number;
+  contractApprovalAttempts: number;
+  contractApprovalPasses: number;
+  repairRoundsToPass: number[];
+  finalRegressionFailures: number;
+  devSmokePassed: number;
+  devSmokeFailed: number;
+  evaluatorConfidence: ConfidenceCounts;
+  evidenceQuality: EvidenceQualityCounts;
+}
+
+export interface HarnessMetrics {
+  completedFeatures: number;
+  blockedFeatures: number;
+  finalRegressionFailures: number;
+  rolePerformance: Record<string, RoleProviderPerformanceMetrics>;
 }
 
 // ---- Run state ----
@@ -168,6 +212,7 @@ export interface RunState {
   id: string;
   prompt: string;
   provider: string;
+  roleProviders: RoleProviderMap;
   workspace: string;
   runDir: string;
   createdAt: string;
@@ -178,12 +223,12 @@ export interface RunState {
   repairRound: number;
   currentFeatureId: string | null;
   currentContractPath: string | null;
+  currentContractJsonPath: string | null;
   currentEvalPath: string | null;
+  currentEvalJsonPath: string | null;
+  currentVerdictPath: string | null;
   summary: string | null;
-  metrics: {
-    completedFeatures: number;
-    blockedFeatures: number;
-  };
+  metrics: HarnessMetrics;
   /** Generator sessionId per sprint, used for repair-round resume. */
   generatorSessionIds: Record<number, string>;
   /** Tracks bilateral contract negotiation progress for resume support. */
@@ -199,6 +244,7 @@ export interface TaskDefinition {
   label: string;
   cwd: string;
   prompt: string;
+  capabilities?: TaskCapabilities;
   userPrompt?: string;
   sprintNumber?: number;
   repairRound?: number;
@@ -218,8 +264,22 @@ export interface TaskResult {
   meta: { sessionId?: string; [key: string]: unknown };
 }
 
-export interface Provider {
+export interface TaskCapabilities {
+  role: AgentRole;
+  provider: ProviderName;
+  hasBrowserQa: boolean;
+  supportsSessionResume: boolean;
+}
+
+export interface ProviderRuntime {
   runTask(task: TaskDefinition): Promise<TaskResult>;
+}
+
+export interface ProviderRegistry {
+  runTask(task: TaskDefinition): Promise<TaskResult>;
+  getProviderName(role: AgentRole): ProviderName;
+  getTaskCapabilities(role: AgentRole): TaskCapabilities;
+  getRouting(): RoleProviderMap;
 }
 
 export interface ProviderHooks {
@@ -227,10 +287,84 @@ export interface ProviderHooks {
   onUpdate?: (update: Record<string, unknown>, task?: TaskDefinition) => void;
 }
 
+// ---- Canonical contract / evaluation artifacts ----
+
+export interface CanonicalContractCriterion {
+  id: string;
+  requirement: string;
+  verification: string[];
+  failConditions: string[];
+  evidenceTargets?: string[];
+}
+
+export interface CanonicalContract {
+  version: 1;
+  sprint: number;
+  feature: {
+    id: string;
+    title: string;
+  };
+  inScope: string[];
+  outOfScope: string[];
+  doneMeans: CanonicalContractCriterion[];
+  verificationSteps: string[];
+  hardThresholds: string[];
+  risksNotes: string[];
+  /** Pass bar overrides negotiated for this sprint. */
+  passBarOverrides?: Record<string, number>;
+  sourceMarkdownPath: string;
+}
+
+export interface CanonicalEvaluationCriterionCheck {
+  criterion: string;
+  status: 'pass' | 'fail';
+  evidence: string[];
+  notes?: string;
+}
+
+export interface CanonicalEvaluationBug {
+  severity: string;
+  title: string;
+  repro: string;
+  expected: string;
+  actual: string;
+  evidence: string[];
+  rootCause: string;
+  previousFixFailure?: string | null;
+}
+
+export interface CanonicalEvaluation {
+  version: 1;
+  sprint: number;
+  evaluationRound: number;
+  feature: {
+    id: string;
+    title: string;
+  };
+  confidence: ConfidenceLevel;
+  evidenceQuality: EvidenceQuality;
+  summary: string;
+  scores: Record<string, number>;
+  contractCriteria: CanonicalEvaluationCriterionCheck[];
+  projectPrinciples: CanonicalEvaluationCriterionCheck[];
+  bugs: CanonicalEvaluationBug[];
+  suggestedRepairPlan: string[];
+  notes: string[];
+  sourceMarkdownPath: string;
+  devSmoke: {
+    required: boolean;
+    ok: boolean;
+    logPath: string | null;
+    url: string | null;
+  };
+}
+
 // ---- Prompt context ----
 
 export interface PromptContext {
   config: HarnessConfig;
+  roleProviders: RoleProviderMap;
+  capabilities: Record<AgentRole, TaskCapabilities>;
   workspace: string;
   runDir: string;
   userPrompt: string;
@@ -246,7 +380,46 @@ export interface PromptContext {
     events: string;
   };
   currentContractPath: string | null;
+  currentContractJsonPath: string | null;
   currentEvalPath: string | null;
+  currentEvalJsonPath: string | null;
   /** Loaded from eval-criteria.json after the research phase. */
   evalCriteria: EvalCriteria | null;
+}
+
+// ---- Harness verdict & repair directive ----
+
+export interface HarnessVerdict {
+  version: 1;
+  sprint: number;
+  evaluationRound: number;
+  featureId: string;
+  passed: boolean;
+  reason: 'all_scores_met' | 'score_below_threshold' | 'missing_scores' | 'smoke_failure';
+  failingScores: { criterion: string; score: number; passBar: number }[];
+  passingScores: { criterion: string; score: number; passBar: number }[];
+  evaluationJsonPath: string;
+}
+
+export interface RepairDirectiveCriterion {
+  criterion: string;
+  currentScore: number;
+  effectivePassBar: number;
+  targetLevelDescription: string;
+  currentLevelDescription: string;
+}
+
+export interface RepairDirective {
+  version: 1;
+  sprint: number;
+  evaluationRound: number;
+  featureId: string;
+  verdictPath: string;
+  failingCriteria: RepairDirectiveCriterion[];
+  passingCriteria: { criterion: string; currentScore: number; effectivePassBar: number }[];
+  mustFixBugs: { severity: string; title: string; rootCause: string; evidence: string[] }[];
+  evaluationPath: string;
+  evaluationJsonPath: string;
+  evidenceDir: string | null;
+  remainingRounds: number;
 }
