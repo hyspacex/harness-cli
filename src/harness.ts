@@ -173,6 +173,8 @@ export class HarnessRunner {
       ensureDir(path.join(runState.runDir, 'evals')),
       ensureDir(path.join(runState.runDir, 'evals', 'evidence')),
       ensureDir(path.join(runState.runDir, 'evals', 'evidence-frozen')),
+      ensureDir(path.join(runState.runDir, 'verdicts')),
+      ensureDir(path.join(runState.runDir, 'repair-directives')),
       ensureDir(path.join(runState.runDir, 'handoff')),
       ensureDir(path.join(runState.runDir, 'benchmarks', 'frozen')),
       ensureDir(path.join(runState.runDir, 'logs')),
@@ -553,7 +555,7 @@ export class HarnessRunner {
                         url: devSmoke?.url || devServer?.getUrl() || null,
                       },
                       devServer?.getUrl(),
-                      runState.currentVerdictPath,
+                      evaluationRound === 0 ? null : runState.currentVerdictPath,
                     );
                   }
                 }
@@ -584,8 +586,12 @@ export class HarnessRunner {
               ],
             );
 
-            const isSmokeFailure = false;
-            const verdict = await this.writeVerdict(runState, evaluationRound, evalResult.parsed, evalCriteria, isSmokeFailure);
+            // Smoke failure paths already wrote a verdict — only write one for evaluator results
+            const smokeVerdictAlreadyWritten = runState.currentVerdictPath !== null
+              && runState.currentVerdictPath === this.verdictPath(runState.sprint, evaluationRound, runState.runDir);
+            const verdict = smokeVerdictAlreadyWritten
+              ? await readJson<HarnessVerdict>(runState.currentVerdictPath!, null as unknown as HarnessVerdict)
+              : await this.writeVerdict(runState, evaluationRound, evalResult.parsed, evalCriteria, false);
 
             if (verdict.passed) {
               this.recordRepairRoundsToPass('generator', evaluationRound, runState);
