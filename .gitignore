@@ -1,7 +1,11 @@
 node_modules/
 dist/
+dist-app/
 .harness/
 tmp/
 .DS_Store
 .claude/settings.local.json
 .codex/
+.playwright-mcp/
+test-results/
+public/data/*.geojson

@@ -1,0 +1,3 @@
+*.png
+.playwright-mcp/
+test-results/
