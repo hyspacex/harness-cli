@@ -4,13 +4,13 @@ import type {
   AgentRole,
   ClaudeSdkConfig,
   ClaudeSdkRoleConfig,
-  Provider,
   ProviderHooks,
+  ProviderRuntime,
   TaskDefinition,
   TaskResult,
 } from '../types.js';
 
-export class ClaudeSdkProvider implements Provider {
+export class ClaudeSdkProvider implements ProviderRuntime {
   private model: string;
   private permissionMode: string;
   private baseMcpServers: Record<string, unknown>;

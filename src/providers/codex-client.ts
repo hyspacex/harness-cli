@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import readline from 'node:readline';
 import { nowIso } from '../utils.js';
@@ -36,6 +38,7 @@ interface RunTurnOptions {
   summary?: string | null;
   serviceTier?: CodexServiceTier | null;
   sandboxMode: CodexSandboxMode;
+  writableRoots: string[];
   networkAccess: boolean;
   approvalMode: CodexApprovalMode;
 }
@@ -282,7 +285,7 @@ export class CodexAppServerClient {
       cwd: options.cwd,
       ...(options.model ? { model: options.model } : {}),
       ...(options.serviceTier ? { serviceTier: options.serviceTier } : {}),
-      approvalPolicy: options.approvalMode,
+      approvalPolicy: this.normalizeApprovalMode(options.approvalMode),
       sandbox: this.buildThreadSandbox(options.sandboxMode),
       serviceName: 'harness-cli',
     })) as { thread?: { id?: string } };
@@ -392,8 +395,13 @@ export class CodexAppServerClient {
         threadId,
         input: [{ type: 'text', text: options.prompt }],
         cwd: options.cwd,
-        approvalPolicy: options.approvalMode,
-        sandboxPolicy: this.buildSandboxPolicy(options.sandboxMode, options.cwd, options.networkAccess),
+        approvalPolicy: this.normalizeApprovalMode(options.approvalMode),
+        sandboxPolicy: this.buildSandboxPolicy(
+          options.sandboxMode,
+          options.cwd,
+          options.writableRoots,
+          options.networkAccess,
+        ),
         ...(options.model ? { model: options.model } : {}),
         ...(options.effort ? { effort: options.effort } : {}),
         ...(options.summary ? { summary: options.summary } : {}),
@@ -433,6 +441,7 @@ export class CodexAppServerClient {
   private buildSandboxPolicy(
     sandboxMode: CodexSandboxMode,
     cwd: string,
+    writableRoots: string[],
     networkAccess: boolean,
   ): Record<string, unknown> {
     switch (sandboxMode) {
@@ -444,7 +453,7 @@ export class CodexAppServerClient {
       default:
         return {
           type: 'workspaceWrite',
-          writableRoots: [cwd],
+          writableRoots: resolveWritableRoots(cwd, writableRoots),
           networkAccess,
         };
     }
@@ -459,6 +468,17 @@ export class CodexAppServerClient {
       case 'workspaceWrite':
       default:
         return 'workspace-write';
+    }
+  }
+
+  private normalizeApprovalMode(approvalMode: CodexApprovalMode): string {
+    switch (approvalMode) {
+      case 'onRequest':
+        return 'on-request';
+      case 'unlessTrusted':
+        return 'untrusted';
+      default:
+        return approvalMode;
     }
   }
 
@@ -504,7 +524,14 @@ export class CodexAppServerClient {
     if (id === null || !method) return;
 
     if (method === 'item/commandExecution/requestApproval' || method === 'item/fileChange/requestApproval') {
-      this.send({ id, result: approvalDecisionForPolicy(this.harnessApprovalPolicy) });
+      const params = asRecord(message.params);
+      this.send({
+        id,
+        result: approvalDecisionForPolicy(
+          this.harnessApprovalPolicy,
+          readAvailableDecisions(params),
+        ),
+      });
       return;
     }
 
@@ -536,18 +563,21 @@ export class CodexAppServerClient {
   }
 }
 
-function approvalDecisionForPolicy(policy: ApprovalPolicy): string {
-  switch (policy) {
-    case 'allow_always':
-      return 'acceptForSession';
-    case 'allow_once':
-      return 'accept';
-    case 'reject_always':
-      return 'decline';
-    case 'reject_once':
-    default:
-      return 'decline';
-  }
+function approvalDecisionForPolicy(
+  policy: ApprovalPolicy,
+  availableDecisions: string[] = [],
+): { decision: string } {
+  const preferred = policy === 'allow_always'
+    ? ['approved_for_session', 'accept_for_session', 'acceptForSession', 'accept']
+    : policy === 'allow_once'
+      ? ['accept', 'allow', 'approve']
+      : ['decline', 'cancel', 'deny', 'reject'];
+
+  const decision = preferred.find((candidate) =>
+    availableDecisions.length === 0 || availableDecisions.includes(candidate),
+  ) || (availableDecisions[0] ?? (policy === 'allow_once' || policy === 'allow_always' ? 'accept' : 'decline'));
+
+  return { decision };
 }
 
 function describeToolLikeItem(item: Record<string, unknown>): string | null {
@@ -580,8 +610,56 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function readAvailableDecisions(params: Record<string, unknown> | null): string[] {
+  if (!params) return [];
+
+  const decisions = Array.isArray(params.available_decisions)
+    ? params.available_decisions
+    : Array.isArray(params.availableDecisions)
+      ? params.availableDecisions
+      : [];
+
+  return decisions.filter((value): value is string => typeof value === 'string');
+}
+
 function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
+}
+
+function resolveWritableRoots(cwd: string, configuredRoots: string[]): string[] {
+  const roots = new Set<string>([path.resolve(cwd)]);
+
+  for (const configuredRoot of configuredRoots) {
+    if (!configuredRoot) continue;
+    roots.add(path.resolve(configuredRoot));
+  }
+
+  for (const inferredRoot of inferAncestorToolCacheRoots(cwd)) {
+    roots.add(inferredRoot);
+  }
+
+  return Array.from(roots);
+}
+
+function inferAncestorToolCacheRoots(cwd: string): string[] {
+  const roots: string[] = [];
+  let current = path.resolve(cwd);
+
+  while (true) {
+    const nodeModulesPath = path.join(current, 'node_modules');
+    if (fs.existsSync(nodeModulesPath)) {
+      roots.push(path.join(nodeModulesPath, '.cache'));
+      roots.push(path.join(nodeModulesPath, '.vite-temp'));
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  return roots;
 }
 
 function sleep(ms: number): Promise<void> {

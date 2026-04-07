@@ -5,14 +5,14 @@ import type {
   CodexConfig,
   CodexRoleConfig,
   CodexServiceTier,
-  Provider,
   ProviderHooks,
+  ProviderRuntime,
   TaskDefinition,
   TaskResult,
 } from '../types.js';
 import { CodexAppServerClient } from './codex-client.js';
 
-export class CodexProvider implements Provider {
+export class CodexProvider implements ProviderRuntime {
   private command: string;
   private args: string[];
   private env: Record<string, string>;
@@ -21,6 +21,7 @@ export class CodexProvider implements Provider {
   private summary: string | null;
   private serviceTier: CodexServiceTier | null;
   private sandboxMode: CodexConfig['sandboxMode'];
+  private writableRoots: string[];
   private networkAccess: boolean;
   private approvalMode: CodexConfig['approvalMode'];
   private roleOverrides: Partial<Record<AgentRole, CodexRoleConfig>>;
@@ -37,8 +38,9 @@ export class CodexProvider implements Provider {
     this.summary = options.summary ?? null;
     this.serviceTier = options.serviceTier ?? null;
     this.sandboxMode = options.sandboxMode || 'workspaceWrite';
+    this.writableRoots = options.writableRoots || [];
     this.networkAccess = options.networkAccess ?? true;
-    this.approvalMode = options.approvalMode || 'onRequest';
+    this.approvalMode = options.approvalMode || 'on-request';
     this.roleOverrides = options.roleOverrides || {};
     this.harnessApprovalPolicy = options.harnessApprovalPolicy || 'allow_once';
     this.onStdErr = hooks.onStdErr || (() => {});
@@ -68,6 +70,7 @@ export class CodexProvider implements Provider {
         summary: roleConfig.summary,
         serviceTier: roleConfig.serviceTier,
         sandboxMode: this.sandboxMode,
+        writableRoots: this.writableRoots,
         networkAccess: this.networkAccess,
         approvalMode: this.approvalMode,
       });

@@ -1,3 +1,5 @@
 *.png
+dist/
+output/
 .playwright-mcp/
 test-results/

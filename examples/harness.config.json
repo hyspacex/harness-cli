@@ -1,5 +1,9 @@
 {
   "provider": "claude-sdk",
+  "roleProviders": {
+    "planner": "codex",
+    "generator": "codex"
+  },
   "workspace": ".",
   "runRoot": ".harness",
   "maxSprints": 8,
@@ -57,8 +61,9 @@
     "summary": "concise",
     "serviceTier": "fast",
     "sandboxMode": "workspaceWrite",
+    "writableRoots": [],
     "networkAccess": true,
-    "approvalMode": "onRequest",
+    "approvalMode": "on-request",
     "assumePlaywrightMcp": false,
     "roleOverrides": {
       "researcher": {},

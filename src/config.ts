@@ -1,9 +1,31 @@
 import path from 'node:path';
-import type { HarnessConfig } from './types.js';
+import type { AgentRole, HarnessConfig, RoleProviderMap } from './types.js';
 import { deepMerge, readJson, writeJson, toAbsolutePath } from './utils.js';
+
+const ALL_ROLES: AgentRole[] = ['researcher', 'planner', 'generator', 'evaluator'];
+
+function buildUniformRoleProviders(provider: HarnessConfig['provider']): RoleProviderMap {
+  return Object.fromEntries(ALL_ROLES.map((role) => [role, provider])) as RoleProviderMap;
+}
+
+function normalizeRoleProviders(
+  provider: HarnessConfig['provider'] | undefined,
+  roleProviders: Partial<RoleProviderMap> | undefined,
+): RoleProviderMap | undefined {
+  if (!provider && !roleProviders) {
+    return undefined;
+  }
+
+  const base = buildUniformRoleProviders(provider || DEFAULT_CONFIG.provider);
+  return {
+    ...base,
+    ...(roleProviders || {}),
+  };
+}
 
 export const DEFAULT_CONFIG: HarnessConfig = {
   provider: 'claude-sdk',
+  roleProviders: buildUniformRoleProviders('claude-sdk'),
   workspace: '.',
   runRoot: '.harness',
   maxSprints: 8,
@@ -61,8 +83,9 @@ export const DEFAULT_CONFIG: HarnessConfig = {
     summary: 'concise',
     serviceTier: 'fast',
     sandboxMode: 'workspaceWrite',
+    writableRoots: [],
     networkAccess: true,
-    approvalMode: 'onRequest',
+    approvalMode: 'on-request',
     assumePlaywrightMcp: false,
     roleOverrides: {
       researcher: {},
@@ -82,12 +105,28 @@ export async function loadConfig(
     : path.resolve(process.cwd(), 'harness.config.json');
 
   const fileConfig = (await readJson<Partial<HarnessConfig>>(absoluteConfigPath, {} as Partial<HarnessConfig>)) || {};
-  const merged = deepMerge(DEFAULT_CONFIG, fileConfig) as HarnessConfig;
-  const finalConfig = deepMerge(merged, overrides) as HarnessConfig;
+  const normalizedFileConfig: Partial<HarnessConfig> = {
+    ...fileConfig,
+    ...(normalizeRoleProviders(fileConfig.provider, fileConfig.roleProviders)
+      ? { roleProviders: normalizeRoleProviders(fileConfig.provider, fileConfig.roleProviders)! }
+      : {}),
+  };
+  const normalizedOverrides: Partial<HarnessConfig> = {
+    ...overrides,
+    ...(normalizeRoleProviders(overrides.provider, overrides.roleProviders)
+      ? { roleProviders: normalizeRoleProviders(overrides.provider, overrides.roleProviders)! }
+      : {}),
+  };
+
+  const merged = deepMerge(DEFAULT_CONFIG, normalizedFileConfig) as HarnessConfig;
+  const finalConfig = deepMerge(merged, normalizedOverrides) as HarnessConfig;
 
   const configDir = path.dirname(absoluteConfigPath);
   finalConfig.workspace = toAbsolutePath(configDir, finalConfig.workspace);
   finalConfig.runRoot = toAbsolutePath(finalConfig.workspace, finalConfig.runRoot);
+  finalConfig.codex.writableRoots = (finalConfig.codex.writableRoots || []).map((root) =>
+    toAbsolutePath(finalConfig.workspace, root),
+  );
   return { config: finalConfig, configPath: absoluteConfigPath };
 }
 

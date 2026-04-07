@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-app/
+app/dist/
 .harness/
 tmp/
 .DS_Store

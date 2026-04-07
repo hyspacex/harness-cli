@@ -50,7 +50,7 @@ async function main(): Promise<void> {
 async function createRunner(flags: Record<string, string>): Promise<HarnessRunner> {
   const overrides = buildOverrides(flags);
   const { config } = await loadConfig(flags.config, overrides);
-  const provider = createProvider(config, {
+  const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
       if (text) {
@@ -68,7 +68,7 @@ async function createRunner(flags: Record<string, string>): Promise<HarnessRunne
       }
     },
   });
-  return new HarnessRunner(config, provider, console);
+  return new HarnessRunner(config, providerRegistry, console);
 }
 
 async function printStatus(flags: Record<string, string>, runId: string | null): Promise<void> {
@@ -94,7 +94,7 @@ async function printStatus(flags: Record<string, string>, runId: string | null):
     const run = await readJson<RunState | null>(path.join(config.runRoot, 'runs', id, 'run.json'), null);
     if (!run) continue;
     console.log(
-      `${run.id}\n  status: ${run.status}\n  provider: ${run.provider}\n  sprint: ${run.sprint}\n  summary: ${run.summary || '(none yet)'}\n`,
+      `${run.id}\n  status: ${run.status}\n  providers: ${run.provider}\n  sprint: ${run.sprint}\n  summary: ${run.summary || '(none yet)'}\n`,
     );
   }
 }
@@ -103,7 +103,7 @@ function printRunSummary(run: RunState): void {
   console.log('');
   console.log(`Run: ${run.id}`);
   console.log(`Status: ${run.status}`);
-  console.log(`Provider: ${run.provider}`);
+  console.log(`Providers: ${run.provider}`);
   console.log(`Workspace: ${run.workspace}`);
   console.log(`Sprint: ${run.sprint}`);
   if (run.currentFeatureId) {

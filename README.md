@@ -11,6 +11,8 @@ A CLI harness for long-running app-development loops:
 
 The harness owns the durable memory, not the model session. Every sprint leaves files under `.harness/runs/<run-id>/`, so you can resume interrupted runs, inspect failures, and keep the orchestration logic outside the coding agent.
 
+Routing is role-based. You can keep one provider for every role, or split work across providers with `roleProviders` when you want, for example, Codex on planning/generation and Claude on evaluation.
+
 Inspired by Anthropic's [Harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps).
 
 ## Supported backends
@@ -39,6 +41,24 @@ Good fit when you want:
 
 If no Codex account is active, the harness starts the ChatGPT login flow and waits for the browser callback before continuing.
 
+## Role routing
+
+`provider` still works as the global default. `roleProviders` only needs to list roles that differ from that default:
+
+```json
+{
+  "provider": "claude-sdk",
+  "roleProviders": {
+    "planner": "codex",
+    "generator": "codex"
+  }
+}
+```
+
+In that example, `researcher` and `evaluator` still use `claude-sdk` while `planner` and `generator` route to `codex`.
+
+That routing is what the harness records in `run.json`, `metrics.json`, and any frozen benchmark artifacts.
+
 ## Quick start
 
 Write a starter config:
@@ -46,6 +66,8 @@ Write a starter config:
 ```bash
 npm run harness -- init
 ```
+
+The starter config keeps every role on the same provider. Add `roleProviders` only when you want to split the loop across backends.
 
 Then edit `harness.config.json` and run:
 
@@ -67,13 +89,17 @@ npm run harness -- status
 
 ## Example config
 
-There is a full example at `examples/harness.config.json`.
+There is a full split-provider example at `examples/harness.config.json`.
 
-A typical Claude Agent SDK setup looks like this:
+A mixed-routing setup with Claude research or evaluation and Codex planning or generation looks like this:
 
 ```json
 {
   "provider": "claude-sdk",
+  "roleProviders": {
+    "planner": "codex",
+    "generator": "codex"
+  },
   "workspace": ".",
   "runRoot": ".harness",
   "maxSprints": 8,
@@ -123,6 +149,12 @@ A typical Codex App Server setup looks like this:
 ```json
 {
   "provider": "codex",
+  "roleProviders": {
+    "researcher": "codex",
+    "planner": "codex",
+    "generator": "codex",
+    "evaluator": "codex"
+  },
   "workspace": ".",
   "runRoot": ".harness",
   "maxSprints": 8,
@@ -139,8 +171,9 @@ A typical Codex App Server setup looks like this:
     "summary": "concise",
     "serviceTier": "fast",
     "sandboxMode": "workspaceWrite",
+    "writableRoots": [],
     "networkAccess": true,
-    "approvalMode": "onRequest",
+    "approvalMode": "on-request",
     "assumePlaywrightMcp": false,
     "roleOverrides": {
       "generator": {},
@@ -189,6 +222,7 @@ Writes:
 Writes:
 
 - `contracts/contract-XX.md`
+- `contracts/contract-XX.json`
 - `contracts/contract-XX-review-YY.md`
 
 ### Generator
@@ -205,25 +239,43 @@ Updates:
 Writes:
 
 - `evals/eval-XX-rYY.md`
+- `evals/eval-XX-rYY.json`
+- `evals/evidence/sXX-rYY/`
+- `evals/evidence-frozen/sXX-rYY/`
 - `logs/*.parsed.json`
 - `logs/*.raw.txt`
+
+### Harness-owned comparison artifacts
+
+Writes:
+
+- `metrics.json`
+- `benchmarks/frozen/manifest.json` when multiple providers are used in one run
+
+The harness now also enforces:
+
+- a mandatory dev-server smoke HTTP check whenever `smoke.start` is configured
+- a final regression smoke sweep after backlog completion
+- evaluator confidence (`low|medium|high`) and evidence quality (`weak|adequate|strong`)
+- immutable frozen evidence snapshots for generator repair rounds
 
 ## How to extend it
 
 The scaffold is intentionally small. Useful next upgrades would be:
 
 1. add a continuous-build mode that skips sprint contracts for simpler tasks
-2. add a final regression sweep after the backlog is done
-3. add branch-per-sprint isolation and auto-rollback on failed evaluation
-4. make git actions harness-enforced instead of prompt-enforced
-5. add budget controls and task-level timeouts
-6. support mid-run replanning when the user changes direction
+2. add branch-per-sprint isolation and auto-rollback on failed evaluation
+3. make git actions harness-enforced instead of prompt-enforced
+4. add budget controls and task-level timeouts
+5. support mid-run replanning when the user changes direction
 
 ## Important caveats
 
 - The harness expects the agent’s final response to be JSON-only. Raw outputs are still saved under `logs/` for debugging.
+- Contracts and evaluations now have canonical JSON companions. The harness validates those files and uses them as the structured source of truth.
 - Claude browser QA is only guaranteed if the evaluator has a Playwright MCP server configured.
 - Codex browser QA is optional; set `codex.assumePlaywrightMcp` only if your Codex environment already provides that tooling.
 - Codex auth is ChatGPT-login only in this scaffold. Keep the app-server process alive until the browser flow reaches the local callback.
 - Codex fast mode is requested by the harness config and also pinned in `.codex/config.toml` for trusted Codex projects.
 - If the workspace has `CLAUDE.md` but no `AGENTS.md`, the harness will copy `CLAUDE.md` to `AGENTS.md` for Codex runs so project instructions are visible to both providers.
+- When `roleProviders` uses more than one provider, the harness freezes benchmark artifacts under `benchmarks/frozen/` so later comparisons use stable inputs.

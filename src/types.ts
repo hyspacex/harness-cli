@@ -45,7 +45,14 @@ export interface ClaudeSdkConfig {
 // ---- Codex App Server configuration ----
 
 export type CodexSandboxMode = 'workspaceWrite' | 'readOnly' | 'dangerFullAccess';
-export type CodexApprovalMode = 'onRequest' | 'unlessTrusted' | 'never';
+export type CodexApprovalMode =
+  | 'on-request'
+  | 'untrusted'
+  | 'never'
+  | 'granular'
+  | 'on-failure'
+  | 'onRequest'
+  | 'unlessTrusted';
 export type CodexServiceTier = 'fast' | 'flex';
 
 export interface CodexRoleConfig {
@@ -64,6 +71,7 @@ export interface CodexConfig {
   summary: string | null;
   serviceTier: CodexServiceTier | null;
   sandboxMode: CodexSandboxMode;
+  writableRoots: string[];
   networkAccess: boolean;
   approvalMode: CodexApprovalMode;
   assumePlaywrightMcp: boolean;
