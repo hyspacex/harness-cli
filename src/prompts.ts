@@ -545,6 +545,8 @@ If this sprint's scope does not fully cover a scored criterion (e.g., AI integra
 deferred to a later sprint), include a \`passBarOverrides\` field in the contract JSON with
 adjusted pass bars for those criteria. Only lower bars for criteria genuinely out of scope —
 do not lower bars to make the sprint easier. Example: \`"passBarOverrides": {"aiIntegrationDepth": 2}\`
+When you lower a threshold, keep the JSON \`hardThresholds\` list and \`passBarOverrides\`
+in sync. The hard-threshold list must show the effective bar the evaluator should apply.
 
 Keep the scope narrow enough for a single sprint.
 ${smokeBlock(context.config.smoke, 'Available smoke commands')}
@@ -596,6 +598,8 @@ Flag any acceptance criterion that is NOT covered by a "Done Means" entry.
 If the contract includes \`passBarOverrides\` in the JSON, verify each override is justified
 by the sprint's scope. Reject overrides that lower bars for work that IS in scope for this sprint.
 Approve overrides for criteria that are genuinely deferred to a later sprint.
+Also verify the JSON \`hardThresholds\` list matches the effective thresholds implied by any
+\`passBarOverrides\`. Reject contracts where the human-readable threshold list and the override map disagree.
 
 Write your review to: ${reviewPath}
 

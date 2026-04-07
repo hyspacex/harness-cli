@@ -37,6 +37,7 @@ import {
   relativeTo,
   getFailingScores,
   getPassingScores,
+  deriveContractPassBarOverrides,
   isPlainObject,
   resolvePass,
   truncate,
@@ -891,11 +892,14 @@ export class HarnessRunner {
 
   // ---------- Contract negotiation ----------
 
-  private async extractPassBarOverrides(runState: RunState): Promise<Record<string, number>> {
+  private async extractPassBarOverrides(
+    runState: RunState,
+    evalCriteria: EvalCriteria | null,
+  ): Promise<Record<string, number>> {
     if (!runState.currentContractJsonPath) return {};
     try {
       const contract = await this.readCanonicalContract(runState.currentContractJsonPath);
-      return contract.passBarOverrides ?? {};
+      return deriveContractPassBarOverrides(contract, evalCriteria);
     } catch {
       return {};
     }
@@ -1032,7 +1036,7 @@ export class HarnessRunner {
             reviewPath,
           ]);
           this.output.log(`✓ Contract approved after ${round + 1} negotiation round(s)`);
-          negotiation.passBarOverrides = await this.extractPassBarOverrides(runState);
+          negotiation.passBarOverrides = await this.extractPassBarOverrides(runState, evalCriteria);
           await this.saveRunState(runState);
           return;
         }
@@ -1048,7 +1052,7 @@ export class HarnessRunner {
       ...negotiation.rounds.map((roundState) => roundState.reviewPath).filter(Boolean) as string[],
     ]);
     this.output.log(`⚠ Contract negotiation exhausted after ${maxRounds} round(s) — using last draft`);
-    negotiation.passBarOverrides = await this.extractPassBarOverrides(runState);
+    negotiation.passBarOverrides = await this.extractPassBarOverrides(runState, evalCriteria);
     await this.saveRunState(runState);
   }
 

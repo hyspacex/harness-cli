@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { Backlog, EvalCriteria, Feature } from './types.js';
+import type { Backlog, CanonicalContract, EvalCriteria, Feature } from './types.js';
 
 export function nowIso(): string {
   return new Date().toISOString();
@@ -304,6 +304,64 @@ export function getPassingScores(
   }
 
   return passing;
+}
+
+function buildBasePassBarMap(criteria: EvalCriteria | null): Record<string, number> {
+  if (!criteria) return {};
+
+  const bars: Record<string, number> = {};
+  for (const [key, config] of Object.entries(criteria.universalCriteria)) {
+    bars[key] = config.passBar;
+  }
+  for (const criterion of criteria.projectCriteria) {
+    bars[criterion.id] = criterion.passBar;
+  }
+  return bars;
+}
+
+function parseHardThreshold(threshold: string): { criterion: string; passBar: number } | null {
+  const match = threshold.match(/`?([A-Za-z][A-Za-z0-9_]*)`?\s*>=\s*(\d+)/);
+  if (!match) return null;
+
+  return {
+    criterion: match[1],
+    passBar: Number(match[2]),
+  };
+}
+
+/**
+ * Contracts express effective score gates twice:
+ * - `hardThresholds`: the human-reviewed canonical list of thresholds
+ * - `passBarOverrides`: the optional machine-readable deltas from the research defaults
+ *
+ * The harness historically only enforced `passBarOverrides`, which let the two drift out of
+ * sync and produced incorrect verdicts. We now derive effective overrides from the canonical
+ * hard-threshold list as well, then merge both representations conservatively.
+ */
+export function deriveContractPassBarOverrides(
+  contract: CanonicalContract,
+  criteria: EvalCriteria | null,
+): Record<string, number> {
+  const mergedOverrides: Record<string, number> = { ...(contract.passBarOverrides ?? {}) };
+  const basePassBars = buildBasePassBarMap(criteria);
+
+  for (const threshold of contract.hardThresholds) {
+    const parsed = parseHardThreshold(threshold);
+    if (!parsed) continue;
+
+    const basePassBar = basePassBars[parsed.criterion];
+    if (typeof basePassBar !== 'number') continue;
+
+    const effectivePassBar = Math.min(parsed.passBar, basePassBar);
+    if (effectivePassBar >= basePassBar) continue;
+
+    const existingOverride = mergedOverrides[parsed.criterion];
+    mergedOverrides[parsed.criterion] = typeof existingOverride === 'number'
+      ? Math.min(existingOverride, effectivePassBar)
+      : effectivePassBar;
+  }
+
+  return mergedOverrides;
 }
 
 export function truncate(text: string, maxLength = 240): string {
