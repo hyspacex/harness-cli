@@ -24,7 +24,7 @@
   },
   "skills": {},
   "claudeSdk": {
-    "model": "claude-sonnet-4-6",
+    "model": "claude-opus-4-7",
     "permissionMode": "bypassPermissions",
     "mcpServers": {},
     "allowedTools": [],
@@ -56,7 +56,7 @@
     "command": "codex",
     "args": ["app-server"],
     "env": {},
-    "model": "gpt-5.4",
+    "model": "gpt-5.5",
     "effort": "xhigh",
     "summary": "concise",
     "serviceTier": "fast",

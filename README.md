@@ -184,7 +184,7 @@ A typical Claude-only setup:
     "test": "npm test"
   },
   "claudeSdk": {
-    "model": "claude-sonnet-4-6",
+    "model": "claude-opus-4-7",
     "permissionMode": "bypassPermissions",
     "roleOverrides": {
       "generator": {

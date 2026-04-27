@@ -22,7 +22,7 @@ export class ClaudeSdkProvider implements ProviderRuntime {
   private onUpdate: NonNullable<ProviderHooks['onUpdate']>;
 
   constructor(options: ClaudeSdkConfig, hooks: ProviderHooks = {}) {
-    this.model = options.model || 'claude-sonnet-4-6';
+    this.model = options.model || 'claude-opus-4-7';
     this.permissionMode = options.permissionMode || 'bypassPermissions';
     this.baseMcpServers = options.mcpServers || {};
     this.baseAllowedTools = options.allowedTools || [];

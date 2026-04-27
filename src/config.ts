@@ -46,7 +46,7 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   },
   skills: {},
   claudeSdk: {
-    model: 'claude-opus-4-6',
+    model: 'claude-opus-4-7',
     permissionMode: 'bypassPermissions',
     mcpServers: {},
     allowedTools: [],
@@ -78,7 +78,7 @@ export const DEFAULT_CONFIG: HarnessConfig = {
     command: 'codex',
     args: ['app-server'],
     env: {},
-    model: 'gpt-5.4',
+    model: 'gpt-5.5',
     effort: 'xhigh',
     summary: 'concise',
     serviceTier: 'fast',
