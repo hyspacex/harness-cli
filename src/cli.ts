@@ -365,12 +365,13 @@ Commands:
   harness eval list [--cases evals/cases]
   harness eval packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
   harness eval compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
-  harness eval matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true]
+  harness eval matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
 
 Notes:
   compare writes packet-a.json, packet-b.json, judge-prompt.md, and judge-result.json.
   If --judge-provider is omitted, compare runs in dry mode and only prepares the judge prompt.
   matrix defaults to dry mode and writes matrix-plan.json plus matrix-plan.md.
+  When executed, matrix writes per-profile packets and pairwise comparison prompts/results.
   Add --objective-checks true to run case-defined commands while building packets.
 `);
 }

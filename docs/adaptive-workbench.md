@@ -42,4 +42,4 @@ For frontend cases, `adaptive` currently expands to a quick scout pass plus a vi
 npm run harness -- eval matrix --case examples-adaptive-dashboard-filtering --profiles adaptive --execute true
 ```
 
-Execution copies fixture workspaces by default, writes per-profile harness runs under the matrix output directory, and emits eval packets that can be compared with the existing locked-rubric `harness eval compare` flow.
+Execution copies fixture workspaces by default, writes per-profile harness runs under the matrix output directory, emits eval packets, and creates locked-rubric pairwise comparison artifacts for successful profile runs. Without `--judge-provider`, those comparisons are dry-mode prompts and inconclusive `judge-result.json` files ready for review. Add `--judge-provider claude-sdk` or `--judge-provider codex` to ask a model judge to score the profile pairs.

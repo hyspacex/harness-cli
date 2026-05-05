@@ -1,12 +1,19 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buildOverrides, flagEnabled } from './cli-flags.js';
+import { buildOverrides, flagEnabled, parseProviderName } from './cli-flags.js';
 import { loadConfig } from './config.js';
 import {
   type HarnessEvalCase,
+  type EvalRunPacket,
+  buildDryJudgeResult,
   buildEvalRunPacket,
+  buildPairwiseJudgePrompt,
   findEvalCase,
   listEvalCases,
+  normalizeJudgeResult,
+  parseJudgeJson,
   writeEvalRunPacket,
+  writeJudgeComparisonArtifacts,
 } from './evals.js';
 import { HarnessRunner } from './harness.js';
 import {
@@ -14,16 +21,19 @@ import {
   resolveExecutionProfile,
 } from './profiles.js';
 import { createProvider } from './providers/index.js';
-import type { HarnessConfig } from './types.js';
+import type { HarnessConfig, ProviderName, RunState } from './types.js';
 import {
-  copyTree,
   deepMerge,
   ensureDir,
   fileExists,
+  listDirectories,
+  readJson,
   slugify,
   writeJson,
   writeText,
 } from './utils.js';
+
+const MATRIX_COPY_EXCLUDE_DIRS = new Set(['.git', '.harness', 'node_modules', 'dist', 'coverage']);
 
 interface MatrixRunPlan {
   caseId: string;
@@ -50,6 +60,36 @@ interface PlannedMatrixRun {
   profileName: string;
   config: HarnessConfig;
   plan: MatrixRunPlan;
+}
+
+interface MatrixRunResult {
+  caseId: string;
+  profile: string;
+  ok: boolean;
+  status: string;
+  runDir?: string;
+  packetPath?: string;
+  packetMarkdownPath?: string;
+  error?: string;
+  packetError?: string;
+}
+
+interface CompletedMatrixRun {
+  evalCase: HarnessEvalCase;
+  profileName: string;
+  runResult: MatrixRunResult;
+  packet: EvalRunPacket;
+}
+
+interface MatrixComparisonResult {
+  caseId: string;
+  profileA: string;
+  profileB: string;
+  outDir: string;
+  judge: string;
+  winner: string;
+  confidence: number;
+  error?: string;
 }
 
 export async function runEvalMatrix(flags: Record<string, string>, positionals: string[]): Promise<void> {
@@ -153,7 +193,9 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
     return;
   }
 
-  const results = [];
+  const judgeProvider = parseProviderName(flags['judge-provider']);
+  const results: MatrixRunResult[] = [];
+  const completedRuns: CompletedMatrixRun[] = [];
   for (const planned of plannedRuns) {
     console.log(`[matrix] ${planned.plan.caseId} / ${planned.profileName}`);
     try {
@@ -175,37 +217,51 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         console,
       );
       const run = await runner.runNew(planned.evalCase.prompt);
-      const packet = await buildEvalRunPacket({
-        runDir: run.runDir,
-        evalCase: planned.evalCase,
-        workspace: planned.config.workspace,
-        runObjectiveChecks: flagEnabled(flags, 'objective-checks'),
-      });
-      const packetBase = path.join(
-        outDir,
-        'packets',
-        slugify(planned.evalCase.id),
-        slugify(planned.profileName),
-        'packet',
-      );
-      await writeEvalRunPacket(packet, `${packetBase}.json`, `${packetBase}.md`);
-      results.push({
+      const packetInfo = await writeMatrixRunPacket({ outDir, planned, runDir: run.runDir, flags });
+      const runResult: MatrixRunResult = {
         caseId: planned.evalCase.id,
         profile: planned.profileName,
         ok: run.status === 'completed',
         status: run.status,
         runDir: run.runDir,
-        packetPath: `${packetBase}.json`,
+        packetPath: packetInfo.packetPath,
+        packetMarkdownPath: packetInfo.packetMarkdownPath,
+      };
+      results.push(runResult);
+      completedRuns.push({
+        evalCase: planned.evalCase,
+        profileName: planned.profileName,
+        runResult,
+        packet: packetInfo.packet,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      results.push({
+      const failedRun = await findLatestMatrixRun(planned.config.runRoot);
+      let packetInfo: Awaited<ReturnType<typeof writeMatrixRunPacket>> | null = null;
+      let packetError: string | undefined;
+      if (failedRun) {
+        try {
+          packetInfo = await writeMatrixRunPacket({
+            outDir,
+            planned,
+            runDir: failedRun.runDir,
+            flags,
+          });
+        } catch (packetBuildError) {
+          packetError = packetBuildError instanceof Error ? packetBuildError.message : String(packetBuildError);
+        }
+      }
+      const runResult: MatrixRunResult = {
         caseId: planned.evalCase.id,
         profile: planned.profileName,
         ok: false,
-        status: 'failed',
+        status: failedRun?.status || 'failed',
+        ...(failedRun?.runDir ? { runDir: failedRun.runDir } : {}),
+        ...(packetInfo ? { packetPath: packetInfo.packetPath, packetMarkdownPath: packetInfo.packetMarkdownPath } : {}),
         error: message,
-      });
+        ...(packetError ? { packetError } : {}),
+      };
+      results.push(runResult);
       if (flags['continue-on-error'] !== 'true') {
         await writeJson(path.join(outDir, 'matrix-result.json'), {
           version: 1,
@@ -217,12 +273,189 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
     }
   }
 
+  const comparisons = await writeMatrixComparisons({
+    outDir,
+    completedRuns,
+    judgeProvider,
+    flags,
+  });
+
   await writeJson(path.join(outDir, 'matrix-result.json'), {
     version: 1,
     builtAt: new Date().toISOString(),
     results,
+    comparisons,
   });
   console.log(`Matrix results: ${path.join(outDir, 'matrix-result.json')}`);
+  if (comparisons.length > 0) {
+    console.log(`Matrix comparisons: ${path.join(outDir, 'comparisons')}`);
+  }
+}
+
+async function writeMatrixRunPacket(options: {
+  outDir: string;
+  planned: PlannedMatrixRun;
+  runDir: string;
+  flags: Record<string, string>;
+}): Promise<{ packet: EvalRunPacket; packetPath: string; packetMarkdownPath: string }> {
+  const packet = await buildEvalRunPacket({
+    runDir: options.runDir,
+    evalCase: options.planned.evalCase,
+    workspace: options.planned.config.workspace,
+    runObjectiveChecks: flagEnabled(options.flags, 'objective-checks'),
+  });
+  const packetBase = path.join(
+    options.outDir,
+    'packets',
+    slugify(options.planned.evalCase.id),
+    slugify(options.planned.profileName),
+    'packet',
+  );
+  const packetPath = `${packetBase}.json`;
+  const packetMarkdownPath = `${packetBase}.md`;
+  await writeEvalRunPacket(packet, packetPath, packetMarkdownPath);
+  return { packet, packetPath, packetMarkdownPath };
+}
+
+async function findLatestMatrixRun(runRoot: string): Promise<RunState | null> {
+  const runIds = await listDirectories(path.join(runRoot, 'runs'));
+  const runs = (
+    await Promise.all(
+      runIds.map((runId) => readJson<RunState | null>(path.join(runRoot, 'runs', runId, 'run.json'), null)),
+    )
+  ).filter((run): run is RunState => run !== null);
+
+  return runs.sort((a, b) => {
+    const aTime = Date.parse(a.updatedAt || a.createdAt);
+    const bTime = Date.parse(b.updatedAt || b.createdAt);
+    return bTime - aTime;
+  })[0] || null;
+}
+
+export async function writeMatrixComparisons(options: {
+  outDir: string;
+  completedRuns: CompletedMatrixRun[];
+  judgeProvider: ProviderName | undefined;
+  flags: Record<string, string>;
+}): Promise<MatrixComparisonResult[]> {
+  const byCase = new Map<string, CompletedMatrixRun[]>();
+  for (const run of options.completedRuns) {
+    if (!run.runResult.ok) continue;
+    const existing = byCase.get(run.evalCase.id) || [];
+    existing.push(run);
+    byCase.set(run.evalCase.id, existing);
+  }
+
+  const comparisons: MatrixComparisonResult[] = [];
+  for (const runs of byCase.values()) {
+    runs.sort((a, b) => a.profileName.localeCompare(b.profileName));
+    for (let i = 0; i < runs.length; i += 1) {
+      for (let j = i + 1; j < runs.length; j += 1) {
+        const runA = runs[i];
+        const runB = runs[j];
+        const prompt = buildPairwiseJudgePrompt(runA.evalCase, runA.packet, runB.packet);
+        const comparisonDir = path.join(
+          options.outDir,
+          'comparisons',
+          slugify(runA.evalCase.id),
+          `${slugify(runA.profileName)}-vs-${slugify(runB.profileName)}`,
+        );
+        let judged = {
+          result: buildDryJudgeResult(runA.evalCase, runA.packet, runB.packet),
+          rawText: null as string | null,
+        };
+        let judgeError: Error | null = null;
+
+        if (options.judgeProvider) {
+          try {
+            judged = await runMatrixJudge({
+              flags: options.flags,
+              judgeProvider: options.judgeProvider,
+              prompt,
+              evalCase: runA.evalCase,
+              packetA: runA.packet,
+              packetB: runB.packet,
+            });
+          } catch (error) {
+            judgeError = error instanceof Error ? error : new Error(String(error));
+            judged.result = {
+              ...judged.result,
+              judge: {
+                provider: options.judgeProvider,
+                model: null,
+              },
+              rationale: `Judge failed before producing a result: ${judgeError.message}`,
+            };
+          }
+        }
+
+        await writeJudgeComparisonArtifacts({
+          outDir: comparisonDir,
+          packetA: runA.packet,
+          packetB: runB.packet,
+          prompt,
+          result: judged.result,
+          rawJudgeText: judged.rawText,
+        });
+        comparisons.push({
+          caseId: runA.evalCase.id,
+          profileA: runA.profileName,
+          profileB: runB.profileName,
+          outDir: comparisonDir,
+          judge: judged.result.judge.provider,
+          winner: judged.result.winner,
+          confidence: judged.result.confidence,
+          ...(judgeError ? { error: judgeError.message } : {}),
+        });
+      }
+    }
+  }
+  return comparisons;
+}
+
+async function runMatrixJudge(options: {
+  flags: Record<string, string>;
+  judgeProvider: ProviderName;
+  prompt: string;
+  evalCase: HarnessEvalCase;
+  packetA: EvalRunPacket;
+  packetB: EvalRunPacket;
+}): Promise<{ result: ReturnType<typeof normalizeJudgeResult>; rawText: string | null }> {
+  const judgeFlags = { ...options.flags, provider: options.judgeProvider };
+  const { config } = await loadConfig(options.flags.config, buildOverrides(judgeFlags), {
+    profile: options.flags['judge-profile'] || options.flags.profile || null,
+  });
+  const providerRegistry = createProvider(config, {
+    onStdErr: (chunk) => {
+      const text = String(chunk || '').trim();
+      if (text) {
+        console.error(`[matrix-judge] ${text}`);
+      }
+    },
+    onUpdate: (update) => {
+      if (update?.sessionUpdate === 'tool_call' && update.title) {
+        console.error(`[matrix-judge-tool] ${update.title}`);
+      }
+    },
+  });
+  const result = await providerRegistry.runTask({
+    kind: 'evaluator',
+    label: `matrix-judge-${options.evalCase.id}`,
+    cwd: process.cwd(),
+    prompt: options.prompt,
+    artifacts: {},
+  });
+  const parsed = result.parsed || parseJudgeJson(result.rawText);
+  return {
+    result: normalizeJudgeResult(parsed, {
+      caseId: options.evalCase.id,
+      provider: options.judgeProvider,
+      model: options.judgeProvider === 'codex' ? config.codex.model : config.claudeSdk.model,
+      packetA: options.packetA,
+      packetB: options.packetB,
+    }),
+    rawText: result.rawText,
+  };
 }
 
 async function resolveMatrixCases(
@@ -282,8 +515,22 @@ async function resolveMatrixWorkspace(options: {
   if ((await fileExists(destination)) && !flagEnabled(options.flags, 'force')) {
     throw new Error(`Workspace destination already exists: ${destination}. Use --force true to overwrite.`);
   }
-  await copyTree(sourceWorkspace, destination);
+  await copyMatrixWorkspace(sourceWorkspace, destination, flagEnabled(options.flags, 'force'));
   return destination;
+}
+
+export async function copyMatrixWorkspace(sourceWorkspace: string, destination: string, force: boolean): Promise<void> {
+  const root = path.resolve(sourceWorkspace);
+  await ensureDir(path.dirname(destination));
+  await fs.cp(root, destination, {
+    recursive: true,
+    force,
+    filter: (sourcePath) => {
+      const relative = path.relative(root, sourcePath);
+      if (!relative) return true;
+      return !relative.split(path.sep).some((part) => MATRIX_COPY_EXCLUDE_DIRS.has(part));
+    },
+  });
 }
 
 function renderMatrixRunCommand(
