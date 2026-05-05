@@ -441,11 +441,17 @@ Write these files exactly:
    }
 
    Feature slicing rules:
+   - Sprint budget: maxSprints is ${context.config.maxSprints}. The backlog MUST contain
+     no more than ${context.config.maxSprints} feature(s). Treat this as the full planning
+     budget, not merely a runtime stop.
+   - Every backlog feature maps to one implementation sprint. If maxSprints is small,
+     choose the highest-value user-visible increments that can realistically fit.
    - Every feature MUST deliver a user-visible increment. A user should be able to open
      the app after each sprint and see meaningful new behavior.
    - NEVER create scaffolding-only features ("HTML boilerplate", "project setup").
      Combine scaffolding with the first user-visible feature.
-   - Target 4-6 features for a typical app. More than 7 is almost certainly too granular.
+   - For larger sprint budgets, target 4-6 features for a typical app. More than 7 is
+     almost certainly too granular. Never exceed maxSprints.
    - Order features so the app is usable after each one, not just after all are done.
    - Use dependsOn to declare which features must be done before each one can start.
 
@@ -460,7 +466,7 @@ Write these files exactly:
 User request:
 ${context.userPrompt}
 
-${jsonOnlyContract('{"status":"ok","summary":"...","filesWritten":["..."],"featureCount":5}')}`;
+${jsonOnlyContract('{"status":"ok","summary":"...","filesWritten":["..."],"featureCount":2}')}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -195,6 +195,21 @@ export function validateBacklog(value: unknown): Backlog {
   return value as unknown as Backlog;
 }
 
+export function validateBacklogSprintBudget(backlog: Backlog, maxSprints: number): Backlog {
+  if (!Number.isInteger(maxSprints) || maxSprints < 1) {
+    throw new Error(`maxSprints must be a positive integer; received ${maxSprints}`);
+  }
+
+  if (backlog.features.length > maxSprints) {
+    throw new Error(
+      `backlog.json contains ${backlog.features.length} features, but maxSprints is ${maxSprints}. ` +
+        'The planner must fit the full backlog within the configured sprint budget.',
+    );
+  }
+
+  return backlog;
+}
+
 export function getNextPendingFeature(backlog: Backlog): Feature | null {
   const doneIds = new Set(
     backlog.features.filter((f) => f.status === 'done').map((f) => f.id),

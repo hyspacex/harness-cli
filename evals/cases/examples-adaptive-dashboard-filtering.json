@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "examples-adaptive-dashboard-filtering",
+  "title": "Adaptive dashboard filtering and empty states",
+  "category": "frontend",
+  "prompt": "Improve the AWS learning platform adaptive dashboard with saved filters, clear empty states, and keyboard-accessible filtering. Keep the existing tutor and quiz flows working.",
+  "workspaceFixture": "examples",
+  "harnessConfig": {
+    "maxSprints": 4,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "install": "npm install",
+      "start": "npm run dev -- --host 127.0.0.1 --port 3000",
+      "test": "npm test",
+      "startTimeout": 15000
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "cwd": ".",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "tests",
+      "command": "npm test",
+      "cwd": ".",
+      "timeoutMs": 120000
+    }
+  ],
+  "judgeFocus": [
+    "user-visible dashboard completeness",
+    "keyboard and screen-reader accessibility",
+    "preservation of tutor and quiz behavior",
+    "whether repair loops used concrete runtime evidence"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "harness-cli-error-ergonomics",
+  "title": "Harness CLI error ergonomics",
+  "category": "cli",
+  "prompt": "Improve Harness CLI error handling for invalid commands, missing values, and malformed numeric flags. Keep the command parser lightweight and preserve existing command behavior.",
+  "workspaceFixture": ".",
+  "harnessConfig": {
+    "maxSprints": 3,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "install": null,
+      "start": null,
+      "test": "npm run build:harness",
+      "startTimeout": 15000
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "build-harness",
+      "command": "npm run build:harness",
+      "cwd": ".",
+      "timeoutMs": 120000
+    }
+  ],
+  "judgeFocus": [
+    "clear CLI feedback",
+    "backward-compatible command behavior",
+    "small focused implementation",
+    "useful harness-generated contracts and verdicts"
+  ]
+}

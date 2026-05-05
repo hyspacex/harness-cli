@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "examples-tutor-demo-fallback",
+  "title": "Tutor demo fallback transparency",
+  "category": "frontend-ai",
+  "prompt": "Improve the tutor panel so demo-mode fallback is transparent, partial answers are preserved after a forced stream failure, and grounding details remain inspectable for the active topic.",
+  "workspaceFixture": "examples",
+  "harnessConfig": {
+    "maxSprints": 4,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "install": "npm install",
+      "start": "npm run dev -- --host 127.0.0.1 --port 3000",
+      "test": "npm test",
+      "startTimeout": 15000
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "cwd": ".",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "tests",
+      "command": "npm test",
+      "cwd": ".",
+      "timeoutMs": 120000
+    }
+  ],
+  "judgeFocus": [
+    "streaming failure resilience",
+    "grounding transparency",
+    "demo/live mode distinction",
+    "contract scope discipline"
+  ]
+}

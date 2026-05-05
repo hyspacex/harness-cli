@@ -5,6 +5,7 @@ import {
   deriveContractPassBarOverrides,
   getFailingScores,
   resolvePass,
+  validateBacklogSprintBudget,
 } from '../dist/utils.js';
 
 const evalCriteria = {
@@ -98,4 +99,30 @@ test('resolvePass uses thresholds derived from the canonical contract hard-thres
 
   assert.equal(resolvePass(parsedEval, evalCriteria, overrides), true);
   assert.deepEqual(getFailingScores(parsedEval, evalCriteria, overrides), []);
+});
+
+test('validateBacklogSprintBudget rejects plans that exceed maxSprints', () => {
+  const backlog = {
+    features: [
+      { id: 'F01', title: 'One', acceptanceCriteria: [], dependsOn: [], status: 'pending' },
+      { id: 'F02', title: 'Two', acceptanceCriteria: [], dependsOn: [], status: 'pending' },
+      { id: 'F03', title: 'Three', acceptanceCriteria: [], dependsOn: [], status: 'pending' },
+    ],
+  };
+
+  assert.throws(
+    () => validateBacklogSprintBudget(backlog, 2),
+    /backlog\.json contains 3 features, but maxSprints is 2/,
+  );
+});
+
+test('validateBacklogSprintBudget accepts plans within maxSprints', () => {
+  const backlog = {
+    features: [
+      { id: 'F01', title: 'One', acceptanceCriteria: [], dependsOn: [], status: 'pending' },
+      { id: 'F02', title: 'Two', acceptanceCriteria: [], dependsOn: [], status: 'pending' },
+    ],
+  };
+
+  assert.equal(validateBacklogSprintBudget(backlog, 2), backlog);
 });

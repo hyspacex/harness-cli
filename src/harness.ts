@@ -42,6 +42,7 @@ import {
   resolvePass,
   truncate,
   validateBacklog,
+  validateBacklogSprintBudget,
   writeJson,
   writeText,
 } from './utils.js';
@@ -885,7 +886,7 @@ export class HarnessRunner {
     }
 
     const backlogRaw = await readJson<Backlog | null>(paths.backlog, null);
-    const backlog = validateBacklog(backlogRaw);
+    const backlog = validateBacklogSprintBudget(validateBacklog(backlogRaw), this.config.maxSprints);
     await writeJson(paths.backlog, backlog);
     return backlog;
   }

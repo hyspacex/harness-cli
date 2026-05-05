@@ -1,0 +1,160 @@
+# Harness Evaluation Design
+
+This document defines a lightweight meta-evaluation system for measuring whether changes to the harness make complete harness runs better or worse.
+
+The main constraint is provider drift. Codex, Claude, and judge models can all change over time. The eval system therefore avoids long-term absolute scores as the primary signal. It compares a baseline harness run against a candidate harness run produced close together from the same eval case, then asks a blinded judge to compare the resulting artifacts.
+
+## Goals
+
+- Measure full-system harness behavior, not just final code quality.
+- Compare baseline vs candidate changes with minimal dependence on provider/model stability.
+- Keep cases cheap enough for PR and nightly use.
+- Preserve enough artifacts to audit why a result passed, failed, or regressed.
+- Support both Codex and Claude as harness providers and as optional judge providers.
+
+## Non-Goals
+
+- Replacing deterministic build, typecheck, test, or smoke checks.
+- Treating one LLM score as authoritative truth.
+- Running every possible provider permutation on every PR.
+- Solving long-term benchmark drift with a static leaderboard.
+
+## Core Model
+
+Each eval case produces two harness runs:
+
+- `Run A`: usually the baseline harness implementation.
+- `Run B`: usually the candidate harness implementation.
+
+The evaluator builds a compact packet from each run directory, including:
+
+- original user prompt
+- final `run.json` and `metrics.json`
+- plan, backlog, contracts, evaluations, verdicts, and repair directives
+- selected logs and final summaries
+- deterministic objective check results, when configured
+
+Packets are redacted before being written or sent to a judge. The packet builder removes common OpenAI, Anthropic, bearer-token, and key/value secret shapes from run summaries, log snippets, objective-check output, and judge prompts.
+
+The judge receives two blinded packets and outputs structured JSON:
+
+```json
+{
+  "version": 1,
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": { "A": 4, "B": 3 },
+    "correctness": { "A": 4, "B": 4 },
+    "implementationQuality": { "A": 3, "B": 3 },
+    "harnessProcessQuality": { "A": 5, "B": 2 },
+    "evaluationTrustworthiness": { "A": 4, "B": 2 }
+  },
+  "criticalRegressions": [],
+  "rationale": "Run A had clearer contracts, caught the defect earlier, and repaired from concrete evidence."
+}
+```
+
+The primary result is pairwise: win, loss, tie, or inconclusive.
+
+## Why Pairwise Judging
+
+Absolute LLM grades are too unstable for this harness because:
+
+- provider models may improve without any harness change
+- judge models may shift scoring behavior
+- a strong generator can sometimes produce a good app despite weak harness behavior
+- a weak provider day can make a good harness look bad
+
+Pairwise comparison controls this by running baseline and candidate under the same conditions and judging them together.
+
+## Evaluation Dimensions
+
+The judge must score both product outcome and harness process:
+
+- `taskFulfillment`: whether the final workspace satisfies the user request.
+- `correctness`: whether objective behavior, tests, smoke checks, and core requirements hold.
+- `implementationQuality`: maintainability, scope control, and fit with the existing project.
+- `harnessProcessQuality`: quality of research, planning, contract scope, repair loops, and handoffs.
+- `evaluationTrustworthiness`: whether harness verdicts were grounded in evidence and did not false-pass or false-fail.
+
+This separation is important because final product quality alone can hide harness regressions.
+
+## Eval Case Shape
+
+Cases live under `evals/cases/*.json`.
+
+```json
+{
+  "version": 1,
+  "id": "examples-adaptive-dashboard-filtering",
+  "title": "Adaptive dashboard filtering",
+  "category": "frontend",
+  "prompt": "Improve the adaptive dashboard with saved filters, empty states, and keyboard-accessible filtering.",
+  "workspaceFixture": "examples",
+  "harnessConfig": {
+    "maxSprints": 4,
+    "maxRepairRounds": 2
+  },
+  "objectiveChecks": [
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "cwd": ".",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "tests",
+      "command": "npm test",
+      "cwd": ".",
+      "timeoutMs": 120000
+    }
+  ],
+  "judgeFocus": [
+    "user-visible completeness",
+    "accessibility",
+    "repair loop usefulness",
+    "verdict trustworthiness"
+  ]
+}
+```
+
+## Recommended Case Suite
+
+Start with five small cases:
+
+1. Frontend workflow polish: visual behavior, empty states, keyboard access.
+2. CLI ergonomics: help text, errors, subcommands, tests.
+3. API validation: schema behavior, error responses, data integrity.
+4. Repair trap: tests pass but runtime evidence should expose a user-visible bug.
+5. Scope discipline: small change in an existing repo where broad refactors are tempting.
+
+PR runs should use a short subset. Nightly runs can use the full suite and repetitions.
+
+## Drift Controls
+
+- Always compare baseline and candidate runs from the same batch.
+- Store harness git SHA, provider routing, model names, timestamps, case id, and raw artifacts.
+- Prefer pairwise win/loss over absolute score movement.
+- Keep frozen historical packets and periodically rejudge them to detect judge drift.
+- Run optional A/B and B/A swapped judge prompts for position-bias checks.
+- Treat low-confidence or order-flipped results as inconclusive.
+
+## First Implementation Slice
+
+The first implementation provides:
+
+- `harness eval list`
+- `harness eval packet <runDir> --case <caseId|path> --out <packet.json>`
+- `harness eval compare --case <caseId|path> --a <runDir> --b <runDir> --out <dir>`
+- optional LLM judging with `--judge-provider claude-sdk|codex`
+- dry-mode prompt generation when no judge provider is supplied
+
+The later implementation layer should add:
+
+- baseline/candidate git worktree orchestration
+- fixture copy/reset
+- repeated runs
+- swapped judge prompts
+- aggregate reports across cases
+- CI-friendly thresholds

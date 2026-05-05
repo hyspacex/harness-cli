@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "examples-quiz-error-state",
+  "title": "Quiz error and recovery state",
+  "category": "frontend-ai",
+  "prompt": "Improve the quiz experience so failed or invalid quiz generation has a visible inline recovery path, preserves any prior completed quiz result, and remains usable in deterministic demo mode.",
+  "workspaceFixture": "examples",
+  "harnessConfig": {
+    "maxSprints": 4,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "install": "npm install",
+      "start": "npm run dev -- --host 127.0.0.1 --port 3000",
+      "test": "npm test",
+      "startTimeout": 15000
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "cwd": ".",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "tests",
+      "command": "npm test",
+      "cwd": ".",
+      "timeoutMs": 120000
+    }
+  ],
+  "judgeFocus": [
+    "clear recovery UX",
+    "deterministic mock-mode behavior",
+    "localStorage contract preservation",
+    "evaluator evidence quality for runtime failures"
+  ]
+}
