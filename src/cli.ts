@@ -371,7 +371,7 @@ Notes:
   compare writes packet-a.json, packet-b.json, judge-prompt.md, and judge-result.json.
   If --judge-provider is omitted, compare runs in dry mode and only prepares the judge prompt.
   matrix defaults to dry mode and writes matrix-plan.json plus matrix-plan.md.
-  When executed, matrix writes per-profile packets and pairwise comparison prompts/results.
+  When executed, matrix writes per-profile packets, matrix-result.md, and pairwise comparison prompts/results.
   Add --objective-checks true to run case-defined commands while building packets.
 `);
 }

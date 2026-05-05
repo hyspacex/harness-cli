@@ -92,6 +92,13 @@ interface MatrixComparisonResult {
   error?: string;
 }
 
+interface MatrixResultFile {
+  version: 1;
+  builtAt: string;
+  results: MatrixRunResult[];
+  comparisons: MatrixComparisonResult[];
+}
+
 export async function runEvalMatrix(flags: Record<string, string>, positionals: string[]): Promise<void> {
   const casesDir = flags.cases || 'evals/cases';
   const evalCases = await resolveMatrixCases(flags, positionals, casesDir);
@@ -271,10 +278,11 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         });
       }
       if (flags['continue-on-error'] !== 'true') {
-        await writeJson(path.join(outDir, 'matrix-result.json'), {
+        await writeMatrixResult(outDir, {
           version: 1,
           builtAt: new Date().toISOString(),
           results,
+          comparisons: [],
         });
         throw error;
       }
@@ -288,7 +296,7 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
     flags,
   });
 
-  await writeJson(path.join(outDir, 'matrix-result.json'), {
+  await writeMatrixResult(outDir, {
     version: 1,
     builtAt: new Date().toISOString(),
     results,
@@ -298,6 +306,55 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
   if (comparisons.length > 0) {
     console.log(`Matrix comparisons: ${path.join(outDir, 'comparisons')}`);
   }
+}
+
+async function writeMatrixResult(outDir: string, result: MatrixResultFile): Promise<void> {
+  await writeJson(path.join(outDir, 'matrix-result.json'), result);
+  await writeText(path.join(outDir, 'matrix-result.md'), renderMatrixResultMarkdown(result));
+}
+
+function renderMatrixResultMarkdown(result: MatrixResultFile): string {
+  const lines: string[] = [];
+  lines.push('# Eval Matrix Result');
+  lines.push('');
+  lines.push(`Built at: ${result.builtAt}`);
+  lines.push('');
+  lines.push('## Runs');
+  lines.push('');
+
+  if (result.results.length === 0) {
+    lines.push('No runs were recorded.');
+  }
+  for (const run of result.results) {
+    lines.push(`### ${run.caseId} / ${run.profile}`);
+    lines.push('');
+    lines.push(`Status: ${run.status}`);
+    lines.push(`OK: ${run.ok ? 'yes' : 'no'}`);
+    if (run.runDir) lines.push(`Run dir: ${run.runDir}`);
+    if (run.packetPath) lines.push(`Packet: ${run.packetPath}`);
+    if (run.packetMarkdownPath) lines.push(`Packet markdown: ${run.packetMarkdownPath}`);
+    if (run.error) lines.push(`Error: ${run.error}`);
+    if (run.packetError) lines.push(`Packet error: ${run.packetError}`);
+    lines.push('');
+  }
+
+  lines.push('## Comparisons');
+  lines.push('');
+  if (result.comparisons.length === 0) {
+    lines.push('No pairwise comparisons were written.');
+  }
+  for (const comparison of result.comparisons) {
+    lines.push(`### ${comparison.caseId} / ${comparison.profileA} vs ${comparison.profileB}`);
+    lines.push('');
+    lines.push(`Judge: ${comparison.judge}`);
+    lines.push(`Winner: ${comparison.winner}`);
+    lines.push(`Confidence: ${comparison.confidence}`);
+    lines.push(`Artifacts: ${comparison.outDir}`);
+    if (comparison.error) lines.push(`Error: ${comparison.error}`);
+    lines.push('');
+  }
+
+  return `${lines.join('\n').trim()}\n`;
 }
 
 async function writeMatrixRunPacket(options: {
