@@ -98,6 +98,26 @@ export interface SkillsConfig {
   [name: string]: string | null;
 }
 
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? Array<U>
+    : T[K] extends (...args: never[]) => unknown
+      ? T[K]
+      : T[K] extends object
+      ? DeepPartial<T[K]>
+      : T[K];
+};
+
+export type HarnessProfileConfig = DeepPartial<Omit<HarnessConfig, 'profiles'>>;
+
+export interface ExecutionProfile {
+  name: string;
+  description: string;
+  tags: string[];
+  useWhen: string[];
+  config: HarnessProfileConfig;
+}
+
 export interface HarnessConfig {
   provider: ProviderName;
   roleProviders: RoleProviderMap;
@@ -111,6 +131,7 @@ export interface HarnessConfig {
   git: GitConfig;
   smoke: SmokeConfig;
   skills: SkillsConfig;
+  profiles: Record<string, HarnessProfileConfig>;
   claudeSdk: ClaudeSdkConfig;
   codex: CodexConfig;
 }
