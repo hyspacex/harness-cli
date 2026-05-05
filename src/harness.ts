@@ -38,6 +38,7 @@ import {
   getFailingScores,
   getPassingScores,
   deriveContractPassBarOverrides,
+  hasPendingFeatures,
   isPlainObject,
   resolvePass,
   truncate,
@@ -621,6 +622,15 @@ export class HarnessRunner {
         if (this.config.failFast) {
           throw new Error(`Sprint ${runState.sprint} failed evaluation for ${feature.id}.`);
         }
+      }
+
+      if (!hasPendingFeatures(backlog)) {
+        const backlogComplete = backlog.features.every((candidate) => candidate.status === 'done');
+        await this.finishRunFromBacklog(runState, backlog);
+        if (backlogComplete) {
+          await this.runFinalRegression(runState);
+        }
+        return runState;
       }
 
       runState.status = 'failed';

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   deriveContractPassBarOverrides,
   getFailingScores,
+  hasPendingFeatures,
   resolvePass,
   validateBacklogSprintBudget,
 } from '../dist/utils.js';
@@ -125,4 +126,25 @@ test('validateBacklogSprintBudget accepts plans within maxSprints', () => {
   };
 
   assert.equal(validateBacklogSprintBudget(backlog, 2), backlog);
+});
+
+test('hasPendingFeatures treats fully consumed capped backlogs as finished', () => {
+  assert.equal(
+    hasPendingFeatures({
+      features: [
+        { id: 'F01', title: 'One', acceptanceCriteria: [], dependsOn: [], status: 'done' },
+        { id: 'F02', title: 'Two', acceptanceCriteria: [], dependsOn: [], status: 'done' },
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    hasPendingFeatures({
+      features: [
+        { id: 'F01', title: 'One', acceptanceCriteria: [], dependsOn: [], status: 'done' },
+        { id: 'F02', title: 'Two', acceptanceCriteria: [], dependsOn: [], status: 'pending' },
+      ],
+    }),
+    true,
+  );
 });

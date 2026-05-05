@@ -210,6 +210,10 @@ export function validateBacklogSprintBudget(backlog: Backlog, maxSprints: number
   return backlog;
 }
 
+export function hasPendingFeatures(backlog: Backlog): boolean {
+  return backlog.features.some((feature) => feature.status === 'pending');
+}
+
 export function getNextPendingFeature(backlog: Backlog): Feature | null {
   const doneIds = new Set(
     backlog.features.filter((f) => f.status === 'done').map((f) => f.id),
