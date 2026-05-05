@@ -34,5 +34,53 @@
     "deterministic mock-mode behavior",
     "localStorage contract preservation",
     "evaluator evidence quality for runtime failures"
-  ]
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "Failed or invalid quiz generation must have a visible inline recovery path.",
+      "Prior completed quiz results must remain available after a later generation failure.",
+      "Deterministic demo mode must remain usable and predictable.",
+      "The implementation must avoid broad unrelated tutor, dashboard, or provider refactors."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace improves quiz failure handling, recovery UX, prior-result preservation, and deterministic demo behavior."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether tests, typecheck, failure paths, persisted quiz state, and demo/live boundaries behave correctly without introduced regressions."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, smallness of the diff, fit with existing quiz state contracts, clear error-state modeling, and focused test coverage."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of research, sprint planning, contract specificity, repair-loop behavior, and whether runtime-failure risks were anticipated."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts are backed by concrete failure/recovery evidence, objective checks, and clear treatment of any unrelated baseline failures."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Prefer concrete failure-path evidence over implementation claims.",
+      "A run that hides a generation failure instead of providing recovery should score poorly on taskFulfillment and correctness."
+    ]
+  }
 }

@@ -28,5 +28,53 @@
     "backward-compatible command behavior",
     "small focused implementation",
     "useful harness-generated contracts and verdicts"
-  ]
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "Invalid commands, missing values, and malformed numeric flags must produce clear actionable errors.",
+      "Existing command behavior must remain backward compatible.",
+      "The command parser must stay lightweight.",
+      "The implementation must include enough deterministic validation to catch parser regressions."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace improves Harness CLI error handling for invalid commands, missing values, and malformed numeric flags."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether build/tests pass and command behavior, error messages, numeric flag validation, and existing commands remain correct."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, lightweight parser changes, clear boundaries, small focused diff, and practical tests or fixtures."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of research, planning, contract specificity, repair behavior, and attention to backward compatibility."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts are backed by command-level evidence and do not over-credit cosmetic error text without parser behavior coverage."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "A broad parser rewrite should reduce implementationQuality unless strongly justified and well covered.",
+      "Evidence should include command outputs or deterministic tests for invalid inputs."
+    ]
+  }
 }

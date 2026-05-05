@@ -13,3 +13,4 @@ npm run harness -- eval compare --case examples-adaptive-dashboard-filtering --a
 
 The first implementation compares existing run directories. The next layer should automate fixture copy/reset and baseline/candidate worktree execution.
 
+Each case owns its locked judge rubric. Keep `prompt`, `objectiveChecks`, and `judgeRubric` unchanged when comparing a baseline harness run to a candidate run; the generated packets include an `evaluationSpecHash` so changed criteria are easy to detect.

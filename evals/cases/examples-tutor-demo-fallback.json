@@ -34,5 +34,53 @@
     "grounding transparency",
     "demo/live mode distinction",
     "contract scope discipline"
-  ]
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "Demo-mode fallback must be visible and understandable to the user.",
+      "Partial tutor answers must be preserved after a forced stream failure.",
+      "Grounding details for the active topic must remain inspectable.",
+      "Live/demo boundaries must not be blurred or misrepresented."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace improves tutor fallback transparency, partial-answer preservation, and grounding inspectability."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether stream-failure paths, demo fallback, preserved partial content, grounding details, tests, and typecheck behave correctly."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, scope control, fit with existing tutor state flow, resilience of async/error handling, and focused tests."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of research, planning, contract specificity, repair behavior, and whether the harness reasoned about streaming/runtime edge cases."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts are grounded in objective checks and concrete forced-failure or runtime evidence rather than agent assertions."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Evidence for the forced stream-failure path is especially important.",
+      "Unrelated rewrites outside the tutor flow should reduce implementationQuality."
+    ]
+  }
 }

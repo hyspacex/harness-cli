@@ -34,5 +34,53 @@
     "keyboard and screen-reader accessibility",
     "preservation of tutor and quiz behavior",
     "whether repair loops used concrete runtime evidence"
-  ]
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "Dashboard filtering must be saved, visible, keyboard-accessible, and scoped to the adaptive dashboard.",
+      "Empty states must be clear and user-facing for dashboard sections affected by filtering or missing data.",
+      "Tutor and quiz flows must remain behaviorally intact.",
+      "Harness planning must fit the configured sprint budget without relying on post-planning truncation."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace satisfies the dashboard filtering, saved state, empty state, accessibility, and tutor/quiz preservation request."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether typecheck, tests, smoke evidence, state persistence, keyboard behavior, and existing tutor/quiz behavior hold without introduced regressions."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, scope control, idiomatic React/state handling, localStorage resilience, styling fit, and focused test coverage."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of research, sprint-budget-aware planning, contract specificity, handoffs, repair behavior, and provider coordination."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether harness verdicts and final eval claims are grounded in concrete artifacts, commands, browser/runtime evidence when available, and clear treatment of baseline failures."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Pre-existing fixture failures should be recorded but should not dominate correctness unless the run worsens or hides them.",
+      "Missing browser evidence should reduce evaluationTrustworthiness when the task has visible UI behavior."
+    ]
+  }
 }

@@ -28,5 +28,53 @@
     "minimality of diff",
     "preservation of provider behavior",
     "whether the evaluator penalized unrelated churn"
-  ]
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "Status output must show completed and blocked feature counts when metrics are available.",
+      "Provider adapters and the harness run loop must not be refactored or behaviorally changed.",
+      "Existing status behavior must remain usable when metrics are missing.",
+      "The diff must stay narrow and proportional to the requested summary improvement."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace adds the requested completed/blocked status summary without changing the requested behavior."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether build/tests pass and status output handles available, missing, zero, completed, and blocked metrics correctly."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "critical",
+        "description": "Scope discipline, minimality, maintainability, avoidance of provider/run-loop churn, and fit with existing CLI formatting."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of research, planning, contract specificity, handoffs, and whether scope limits were preserved through implementation and evaluation."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts explicitly checked for unrelated churn and grounded scope claims in diffs, commands, and artifacts."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Any provider adapter or run-loop modification should strongly penalize implementationQuality unless the run proves it was required.",
+      "A tiny correct change with clear validation should beat a larger featureful change."
+    ]
+  }
 }
