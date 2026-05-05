@@ -365,7 +365,7 @@ export async function buildEvalRunPacket(options: BuildEvalRunPacketOptions): Pr
       sprint: runState.sprint,
       currentFeatureId: runState.currentFeatureId,
       summary: redactSensitiveText(runState.summary),
-      lastError: redactSensitiveText(runState.lastError),
+      lastError: runState.status === 'failed' ? redactSensitiveText(runState.lastError) : null,
     },
     objectiveChecks,
     metrics,

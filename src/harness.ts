@@ -429,6 +429,11 @@ export class HarnessRunner {
 
   private async execute(runState: RunState): Promise<RunState> {
     try {
+      if (runState.lastError) {
+        runState.lastError = null;
+        await this.saveRunState(runState);
+      }
+
       await this.ensureSkills();
 
       const evalCriteria = await this.ensureResearch(runState);
@@ -780,6 +785,7 @@ export class HarnessRunner {
         `${pending.map((feature) => feature.id).join(', ')}).`;
     } else {
       runState.status = 'completed';
+      runState.lastError = null;
       runState.summary =
         blocked.length > 0
           ? `${done.length}/${backlog.features.length} features done, ${blocked.length} blocked (${blocked.map((feature) => feature.id).join(', ')}).`

@@ -1,5 +1,5 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import { extractJsonObject } from '../utils.js';
+import { query, type OutputFormat } from '@anthropic-ai/claude-agent-sdk';
+import { extractJsonObject, isPlainObject } from '../utils.js';
 import type {
   AgentRole,
   ClaudeSdkConfig,
@@ -38,6 +38,7 @@ export class ClaudeSdkProvider implements ProviderRuntime {
 
     let assistantText = '';
     let resultText = '';
+    let structuredOutput: Record<string, unknown> | null = null;
     let isError = false;
     let sessionId: string | undefined;
 
@@ -68,6 +69,9 @@ export class ClaudeSdkProvider implements ProviderRuntime {
         if (msg.type === 'result' && msg.subtype === 'success') {
           resultText = (msg.result as string) || '';
           isError = !!(msg.is_error);
+          if (isPlainObject(msg.structured_output)) {
+            structuredOutput = msg.structured_output;
+          }
         }
 
         if (msg.type === 'result' && msg.subtype === 'error') {
@@ -95,8 +99,8 @@ export class ClaudeSdkProvider implements ProviderRuntime {
 
     return {
       rawText,
-      parsed: extractJsonObject(rawText),
-      meta: { sessionId },
+      parsed: structuredOutput || extractJsonObject(rawText),
+      meta: { sessionId, structuredOutput: !!structuredOutput },
     };
   }
 
@@ -153,6 +157,79 @@ export class ClaudeSdkProvider implements ProviderRuntime {
       options.env = this.env;
     }
 
+    const outputFormat = buildClaudeTaskOutputFormat(task);
+    if (outputFormat) {
+      options.outputFormat = outputFormat;
+    }
+
     return options;
   }
+}
+
+export function buildClaudeTaskOutputFormat(task: Pick<TaskDefinition, 'kind' | 'label'>): OutputFormat {
+  const summaryProperty = { type: 'string' };
+  const stringArrayProperty = { type: 'array', items: { type: 'string' } };
+  const schema: Record<string, unknown> = {
+    type: 'object',
+    additionalProperties: true,
+    properties: {
+      status: { type: 'string' },
+      summary: summaryProperty,
+      filesWritten: stringArrayProperty,
+      filesTouched: stringArrayProperty,
+      commandsRun: stringArrayProperty,
+      risks: stringArrayProperty,
+      feedback: stringArrayProperty,
+      scores: {
+        type: 'object',
+        additionalProperties: { type: 'number' },
+      },
+      bugs: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: true,
+        },
+      },
+      confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+      evidenceQuality: { type: 'string', enum: ['weak', 'adequate', 'strong'] },
+    },
+    required: ['summary'],
+  };
+
+  if (task.label.startsWith('contract-review')) {
+    schema.required = ['status', 'summary', 'feedback'];
+    (schema.properties as Record<string, unknown>).status = { type: 'string', enum: ['approved', 'revise'] };
+  } else if (task.kind === 'evaluator') {
+    schema.required = ['summary', 'confidence', 'evidenceQuality', 'scores', 'bugs'];
+  } else if (task.label.startsWith('contract-draft')) {
+    schema.required = ['status', 'summary', 'filesWritten'];
+    Object.assign(schema.properties as Record<string, unknown>, {
+      contractPath: { type: 'string' },
+      contractJsonPath: { type: 'string' },
+    });
+  } else if (task.kind === 'researcher') {
+    schema.required = ['status', 'summary', 'filesWritten'];
+    Object.assign(schema.properties as Record<string, unknown>, {
+      projectType: { type: 'string' },
+      criteriaCount: { type: 'number' },
+    });
+  } else if (task.kind === 'planner') {
+    schema.required = ['status', 'summary', 'filesWritten'];
+    (schema.properties as Record<string, unknown>).featureCount = { type: 'number' };
+  } else if (task.kind === 'generator') {
+    schema.required = ['status', 'summary'];
+    Object.assign(schema.properties as Record<string, unknown>, {
+      selfCheck: {
+        type: 'object',
+        additionalProperties: true,
+      },
+      commit: {},
+    });
+  }
+
+  return {
+    type: 'json_schema',
+    schema,
+  };
 }
