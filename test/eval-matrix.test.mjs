@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { computeEvaluationSpecHash, findEvalCase } from '../dist/evals.js';
-import { copyMatrixWorkspace, writeMatrixComparisons } from '../dist/eval-matrix.js';
+import { copyMatrixWorkspace, runEvalMatrix, writeMatrixComparisons } from '../dist/eval-matrix.js';
 
 function makePacket(evalCase, profile) {
   const specHash = computeEvaluationSpecHash(evalCase);
@@ -45,6 +45,46 @@ function makePacket(evalCase, profile) {
     metrics: {},
     artifacts: [],
   };
+}
+
+async function writeRunState(runRoot, evalCase, profile, status) {
+  const runDir = path.join(runRoot, 'runs', `${profile}-run`);
+  await fs.mkdir(runDir, { recursive: true });
+  await fs.writeFile(
+    path.join(runDir, 'run.json'),
+    JSON.stringify({
+      id: `${profile}-run`,
+      prompt: evalCase.prompt,
+      provider: `profile:${profile}`,
+      executionProfile: profile,
+      roleProviders: {
+        researcher: 'claude-sdk',
+        planner: 'claude-sdk',
+        generator: profile === 'visual-qa' ? 'codex' : 'claude-sdk',
+        evaluator: 'claude-sdk',
+      },
+      workspace: '/tmp/workspace',
+      runDir,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: status === 'completed' ? '2026-01-01T00:00:02.000Z' : '2026-01-01T00:00:01.000Z',
+      status,
+      lastError: status === 'failed' ? 'Synthetic run failure.' : null,
+      sprint: 1,
+      repairRound: 0,
+      currentFeatureId: null,
+      currentContractPath: null,
+      currentContractJsonPath: null,
+      currentEvalPath: null,
+      currentEvalJsonPath: null,
+      currentVerdictPath: null,
+      summary: `${profile} ${status}.`,
+      metrics: {},
+      generatorSessionIds: {},
+      currentNegotiation: null,
+      smokeInstalledAt: null,
+    }, null, 2),
+  );
+  return runDir;
 }
 
 test('matrix comparisons write locked-rubric pairwise artifacts for profile runs', async () => {
@@ -104,4 +144,61 @@ test('matrix workspace copies exclude stale harness and dependency artifacts', a
   await fs.access(path.join(destination, 'src', 'app.ts'));
   await assert.rejects(fs.access(path.join(destination, '.harness')));
   await assert.rejects(fs.access(path.join(destination, 'node_modules')));
+});
+
+test('matrix report mode rebuilds packets, results, and comparisons from a plan', async () => {
+  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-matrix-report-'));
+  const evalCase = await findEvalCase('examples-adaptive-dashboard-filtering');
+  const casesDir = path.resolve('evals/cases');
+  const fastRunRoot = path.join(outDir, 'run-roots', evalCase.id, 'fast');
+  const visualRunRoot = path.join(outDir, 'run-roots', evalCase.id, 'visual-qa');
+  await writeRunState(fastRunRoot, evalCase, 'fast', 'failed');
+  await writeRunState(visualRunRoot, evalCase, 'visual-qa', 'completed');
+  await fs.writeFile(
+    path.join(outDir, 'matrix-plan.json'),
+    JSON.stringify({
+      version: 1,
+      builtAt: '2026-01-01T00:00:00.000Z',
+      mode: 'execute',
+      profileSelection: 'fast,visual-qa',
+      casesDir,
+      runs: [
+        {
+          caseId: evalCase.id,
+          caseTitle: evalCase.title,
+          category: evalCase.category,
+          profile: 'fast',
+          profileDescription: 'Fast profile',
+          prompt: evalCase.prompt,
+          workspace: '/tmp/workspace',
+          runRoot: fastRunRoot,
+          command: 'test fast',
+          configSummary: {},
+        },
+        {
+          caseId: evalCase.id,
+          caseTitle: evalCase.title,
+          category: evalCase.category,
+          profile: 'visual-qa',
+          profileDescription: 'Visual QA profile',
+          prompt: evalCase.prompt,
+          workspace: '/tmp/workspace',
+          runRoot: visualRunRoot,
+          command: 'test visual',
+          configSummary: {},
+        },
+      ],
+    }, null, 2),
+  );
+
+  await runEvalMatrix({ from: outDir }, ['matrix']);
+
+  const result = JSON.parse(await fs.readFile(path.join(outDir, 'matrix-result.json'), 'utf8'));
+  const report = await fs.readFile(path.join(outDir, 'matrix-result.md'), 'utf8');
+
+  assert.equal(result.results.length, 2);
+  assert.equal(result.comparisons.length, 1);
+  assert.match(report, /fast vs visual-qa/);
+  await fs.access(path.join(outDir, 'packets', evalCase.id, 'fast', 'packet.json'));
+  await fs.access(path.join(result.comparisons[0].outDir, 'judge-prompt.md'));
 });

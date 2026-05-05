@@ -43,3 +43,9 @@ npm run harness -- eval matrix --case examples-adaptive-dashboard-filtering --pr
 ```
 
 Execution copies fixture workspaces by default, writes per-profile harness runs under the matrix output directory, emits eval packets, writes `matrix-result.md`, and creates locked-rubric pairwise comparison artifacts for packetized profile runs, including failed runs. Without `--judge-provider`, those comparisons are dry-mode prompts and inconclusive `judge-result.json` files ready for review. Add `--judge-provider claude-sdk` or `--judge-provider codex` to ask a model judge to score the profile pairs.
+
+Regenerate packets and reports from an existing matrix directory without rerunning agents:
+
+```bash
+npm run harness -- eval matrix report --from /tmp/harness-cli-live-matrix-fast
+```

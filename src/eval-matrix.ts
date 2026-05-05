@@ -62,6 +62,15 @@ interface PlannedMatrixRun {
   plan: MatrixRunPlan;
 }
 
+interface MatrixPlanFile {
+  version: number;
+  builtAt: string;
+  mode: string;
+  profileSelection: string;
+  casesDir: string;
+  runs: MatrixRunPlan[];
+}
+
 interface MatrixRunResult {
   caseId: string;
   profile: string;
@@ -100,6 +109,11 @@ interface MatrixResultFile {
 }
 
 export async function runEvalMatrix(flags: Record<string, string>, positionals: string[]): Promise<void> {
+  if (flags.from || positionals[1] === 'report') {
+    await reportEvalMatrix(flags, positionals);
+    return;
+  }
+
   const casesDir = flags.cases || 'evals/cases';
   const evalCases = await resolveMatrixCases(flags, positionals, casesDir);
   if (evalCases.length === 0) {
@@ -224,7 +238,14 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         console,
       );
       const run = await runner.runNew(planned.evalCase.prompt);
-      const packetInfo = await writeMatrixRunPacket({ outDir, planned, runDir: run.runDir, flags });
+      const packetInfo = await writeMatrixRunPacket({
+        outDir,
+        evalCase: planned.evalCase,
+        profileName: planned.profileName,
+        workspace: planned.config.workspace,
+        runDir: run.runDir,
+        flags,
+      });
       const runResult: MatrixRunResult = {
         caseId: planned.evalCase.id,
         profile: planned.profileName,
@@ -250,7 +271,9 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         try {
           packetInfo = await writeMatrixRunPacket({
             outDir,
-            planned,
+            evalCase: planned.evalCase,
+            profileName: planned.profileName,
+            workspace: planned.config.workspace,
             runDir: failedRun.runDir,
             flags,
           });
@@ -308,6 +331,91 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
   }
 }
 
+async function reportEvalMatrix(flags: Record<string, string>, positionals: string[]): Promise<void> {
+  const outDirInput = flags.from || positionals[2] || flags.out;
+  if (!outDirInput) {
+    throw new Error('Provide a matrix output directory: harness eval matrix report --from <dir>');
+  }
+  const outDir = path.resolve(outDirInput);
+
+  const plan = await readJson<MatrixPlanFile | null>(path.join(outDir, 'matrix-plan.json'), null);
+  if (!plan) {
+    throw new Error(`Matrix plan not found: ${path.join(outDir, 'matrix-plan.json')}`);
+  }
+
+  const judgeProvider = parseProviderName(flags['judge-provider']);
+  const results: MatrixRunResult[] = [];
+  const packetizedRuns: PacketizedMatrixRun[] = [];
+  for (const planRun of plan.runs) {
+    const evalCase = await findEvalCase(planRun.caseId, flags.cases || plan.casesDir || 'evals/cases');
+    const run = await findLatestMatrixRun(planRun.runRoot);
+    if (!run) {
+      results.push({
+        caseId: planRun.caseId,
+        profile: planRun.profile,
+        ok: false,
+        status: 'missing',
+        error: `No run.json found under ${path.join(planRun.runRoot, 'runs')}`,
+      });
+      continue;
+    }
+
+    let packetInfo: Awaited<ReturnType<typeof writeMatrixRunPacket>> | null = null;
+    let packetError: string | undefined;
+    try {
+      packetInfo = await writeMatrixRunPacket({
+        outDir,
+        evalCase,
+        profileName: planRun.profile,
+        workspace: run.workspace || planRun.workspace,
+        runDir: run.runDir,
+        flags,
+      });
+    } catch (error) {
+      packetError = error instanceof Error ? error.message : String(error);
+    }
+
+    const runResult: MatrixRunResult = {
+      caseId: evalCase.id,
+      profile: planRun.profile,
+      ok: run.status === 'completed',
+      status: run.status,
+      runDir: run.runDir,
+      ...(packetInfo ? { packetPath: packetInfo.packetPath, packetMarkdownPath: packetInfo.packetMarkdownPath } : {}),
+      ...(run.lastError ? { error: run.lastError } : {}),
+      ...(packetError ? { packetError } : {}),
+    };
+    results.push(runResult);
+
+    if (packetInfo) {
+      packetizedRuns.push({
+        evalCase,
+        profileName: planRun.profile,
+        runResult,
+        packet: packetInfo.packet,
+      });
+    }
+  }
+
+  const comparisons = await writeMatrixComparisons({
+    outDir,
+    packetizedRuns,
+    judgeProvider,
+    flags,
+  });
+  await writeMatrixResult(outDir, {
+    version: 1,
+    builtAt: new Date().toISOString(),
+    results,
+    comparisons,
+  });
+  console.log(`Matrix results: ${path.join(outDir, 'matrix-result.json')}`);
+  console.log(`Matrix report: ${path.join(outDir, 'matrix-result.md')}`);
+  if (comparisons.length > 0) {
+    console.log(`Matrix comparisons: ${path.join(outDir, 'comparisons')}`);
+  }
+}
+
 async function writeMatrixResult(outDir: string, result: MatrixResultFile): Promise<void> {
   await writeJson(path.join(outDir, 'matrix-result.json'), result);
   await writeText(path.join(outDir, 'matrix-result.md'), renderMatrixResultMarkdown(result));
@@ -359,21 +467,23 @@ function renderMatrixResultMarkdown(result: MatrixResultFile): string {
 
 async function writeMatrixRunPacket(options: {
   outDir: string;
-  planned: PlannedMatrixRun;
+  evalCase: HarnessEvalCase;
+  profileName: string;
+  workspace: string;
   runDir: string;
   flags: Record<string, string>;
 }): Promise<{ packet: EvalRunPacket; packetPath: string; packetMarkdownPath: string }> {
   const packet = await buildEvalRunPacket({
     runDir: options.runDir,
-    evalCase: options.planned.evalCase,
-    workspace: options.planned.config.workspace,
+    evalCase: options.evalCase,
+    workspace: options.workspace,
     runObjectiveChecks: flagEnabled(options.flags, 'objective-checks'),
   });
   const packetBase = path.join(
     options.outDir,
     'packets',
-    slugify(options.planned.evalCase.id),
-    slugify(options.planned.profileName),
+    slugify(options.evalCase.id),
+    slugify(options.profileName),
     'packet',
   );
   const packetPath = `${packetBase}.json`;
