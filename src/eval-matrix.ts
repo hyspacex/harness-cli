@@ -74,7 +74,7 @@ interface MatrixRunResult {
   packetError?: string;
 }
 
-interface CompletedMatrixRun {
+interface PacketizedMatrixRun {
   evalCase: HarnessEvalCase;
   profileName: string;
   runResult: MatrixRunResult;
@@ -195,7 +195,7 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
 
   const judgeProvider = parseProviderName(flags['judge-provider']);
   const results: MatrixRunResult[] = [];
-  const completedRuns: CompletedMatrixRun[] = [];
+  const packetizedRuns: PacketizedMatrixRun[] = [];
   for (const planned of plannedRuns) {
     console.log(`[matrix] ${planned.plan.caseId} / ${planned.profileName}`);
     try {
@@ -228,7 +228,7 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         packetMarkdownPath: packetInfo.packetMarkdownPath,
       };
       results.push(runResult);
-      completedRuns.push({
+      packetizedRuns.push({
         evalCase: planned.evalCase,
         profileName: planned.profileName,
         runResult,
@@ -262,6 +262,14 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         ...(packetError ? { packetError } : {}),
       };
       results.push(runResult);
+      if (packetInfo) {
+        packetizedRuns.push({
+          evalCase: planned.evalCase,
+          profileName: planned.profileName,
+          runResult,
+          packet: packetInfo.packet,
+        });
+      }
       if (flags['continue-on-error'] !== 'true') {
         await writeJson(path.join(outDir, 'matrix-result.json'), {
           version: 1,
@@ -275,7 +283,7 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
 
   const comparisons = await writeMatrixComparisons({
     outDir,
-    completedRuns,
+    packetizedRuns,
     judgeProvider,
     flags,
   });
@@ -334,13 +342,12 @@ async function findLatestMatrixRun(runRoot: string): Promise<RunState | null> {
 
 export async function writeMatrixComparisons(options: {
   outDir: string;
-  completedRuns: CompletedMatrixRun[];
+  packetizedRuns: PacketizedMatrixRun[];
   judgeProvider: ProviderName | undefined;
   flags: Record<string, string>;
 }): Promise<MatrixComparisonResult[]> {
-  const byCase = new Map<string, CompletedMatrixRun[]>();
-  for (const run of options.completedRuns) {
-    if (!run.runResult.ok) continue;
+  const byCase = new Map<string, PacketizedMatrixRun[]>();
+  for (const run of options.packetizedRuns) {
     const existing = byCase.get(run.evalCase.id) || [];
     existing.push(run);
     byCase.set(run.evalCase.id, existing);

@@ -55,11 +55,11 @@ test('matrix comparisons write locked-rubric pairwise artifacts for profile runs
 
   const comparisons = await writeMatrixComparisons({
     outDir,
-    completedRuns: [
+    packetizedRuns: [
       {
         evalCase,
         profileName: 'fast',
-        runResult: { caseId: evalCase.id, profile: 'fast', ok: true, status: 'completed' },
+        runResult: { caseId: evalCase.id, profile: 'fast', ok: false, status: 'failed' },
         packet: fastPacket,
       },
       {
