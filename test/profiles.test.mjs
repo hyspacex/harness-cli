@@ -19,6 +19,7 @@ test('built-in codex-only profile routes every role through codex', async () => 
   const { config } = await loadConfig(configPath, {}, { profile: 'codex-only' });
 
   assert.equal(config.provider, 'codex');
+  assert.equal(config.executionProfile, 'codex-only');
   assert.deepEqual(config.roleProviders, {
     researcher: 'codex',
     planner: 'codex',
@@ -41,6 +42,7 @@ test('custom sparse profiles inherit the surrounding provider routing', async ()
   const { config } = await loadConfig(configPath, {}, { profile: 'claude-eval' });
 
   assert.equal(config.provider, 'codex');
+  assert.equal(config.executionProfile, 'claude-eval');
   assert.deepEqual(config.roleProviders, {
     researcher: 'codex',
     planner: 'codex',

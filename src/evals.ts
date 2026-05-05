@@ -118,6 +118,7 @@ export interface EvalRunPacket {
     id: string;
     status: RunState['status'];
     provider: string;
+    executionProfile: string | null;
     roleProviders: RunState['roleProviders'];
     workspace: string;
     runDir: string;
@@ -357,6 +358,7 @@ export async function buildEvalRunPacket(options: BuildEvalRunPacketOptions): Pr
       id: runState.id,
       status: runState.status,
       provider: runState.provider,
+      executionProfile: runState.executionProfile || null,
       roleProviders: runState.roleProviders,
       workspace: runState.workspace,
       runDir,
@@ -393,6 +395,9 @@ export function renderEvalRunPacketMarkdown(packet: EvalRunPacket): string {
   lines.push(`Category: ${packet.case.category || '(unknown)'}`);
   lines.push(`Status: ${packet.run.status}`);
   lines.push(`Provider: ${packet.run.provider}`);
+  if (packet.run.executionProfile) {
+    lines.push(`Profile: ${packet.run.executionProfile}`);
+  }
   lines.push(`Sprint: ${packet.run.sprint}`);
   lines.push(`Summary: ${packet.run.summary || '(none)'}`);
   if (packet.run.lastError) {

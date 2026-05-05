@@ -120,6 +120,7 @@ export interface ExecutionProfile {
 
 export interface HarnessConfig {
   provider: ProviderName;
+  executionProfile: string | null;
   roleProviders: RoleProviderMap;
   workspace: string;
   runRoot: string;
@@ -241,6 +242,7 @@ export interface RunState {
   id: string;
   prompt: string;
   provider: string;
+  executionProfile: string | null;
   roleProviders: RoleProviderMap;
   workspace: string;
   runDir: string;

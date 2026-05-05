@@ -307,7 +307,7 @@ async function printStatus(flags: Record<string, string>, runId: string | null):
     const run = await readJson<RunState | null>(path.join(config.runRoot, 'runs', id, 'run.json'), null);
     if (!run) continue;
     console.log(
-      `${run.id}\n  status: ${run.status}\n  providers: ${run.provider}\n  sprint: ${run.sprint}\n  summary: ${run.summary || '(none yet)'}\n`,
+      `${run.id}\n  status: ${run.status}\n  providers: ${run.provider}\n  profile: ${run.executionProfile || '(none)'}\n  sprint: ${run.sprint}\n  summary: ${run.summary || '(none yet)'}\n`,
     );
   }
 }
@@ -317,6 +317,9 @@ function printRunSummary(run: RunState): void {
   console.log(`Run: ${run.id}`);
   console.log(`Status: ${run.status}`);
   console.log(`Providers: ${run.provider}`);
+  if (run.executionProfile) {
+    console.log(`Profile: ${run.executionProfile}`);
+  }
   console.log(`Workspace: ${run.workspace}`);
   console.log(`Sprint: ${run.sprint}`);
   if (run.currentFeatureId) {

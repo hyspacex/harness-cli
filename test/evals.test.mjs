@@ -119,5 +119,6 @@ test('eval packets ignore stale lastError on completed runs', async () => {
   const packet = await buildEvalRunPacket({ runDir });
 
   assert.equal(packet.run.status, 'completed');
+  assert.equal(packet.run.executionProfile, null);
   assert.equal(packet.run.lastError, null);
 });

@@ -31,6 +31,7 @@ function normalizeFinalConfig(config: HarnessConfig): HarnessConfig {
 
 export const DEFAULT_CONFIG: HarnessConfig = {
   provider: 'claude-sdk',
+  executionProfile: null,
   roleProviders: buildUniformRoleProviders('claude-sdk'),
   workspace: '.',
   runRoot: '.harness',
@@ -122,6 +123,7 @@ export async function loadConfig(
     : {};
   const profiled = deepMerge(merged, profileConfig) as HarnessConfig;
   const finalConfig = normalizeFinalConfig(deepMerge(profiled, normalizedOverrides) as HarnessConfig);
+  finalConfig.executionProfile = options.profile || finalConfig.executionProfile || null;
 
   const configDir = path.dirname(absoluteConfigPath);
   finalConfig.workspace = toAbsolutePath(configDir, finalConfig.workspace);

@@ -141,6 +141,7 @@ export class HarnessRunner {
       id: runId,
       prompt,
       provider: this.providerSummary(),
+      executionProfile: this.config.executionProfile,
       roleProviders: { ...this.roleProviders },
       workspace: this.config.workspace,
       runDir,
