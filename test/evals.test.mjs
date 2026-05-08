@@ -122,3 +122,78 @@ test('eval packets ignore stale lastError on completed runs', async () => {
   assert.equal(packet.run.executionProfile, null);
   assert.equal(packet.run.lastError, null);
 });
+
+test('objective checks can expect non-zero exits and required output', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-eval-objective-'));
+  const runDir = path.join(tempRoot, 'runs', 'objective-run');
+  await fs.mkdir(runDir, { recursive: true });
+  await fs.writeFile(
+    path.join(runDir, 'run.json'),
+    JSON.stringify({
+      id: 'objective-run',
+      prompt: 'Build a demo',
+      provider: 'claude-sdk',
+      roleProviders: {
+        researcher: 'claude-sdk',
+        planner: 'claude-sdk',
+        generator: 'codex',
+        evaluator: 'claude-sdk',
+      },
+      workspace: tempRoot,
+      runDir,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      status: 'completed',
+      lastError: null,
+      sprint: 1,
+      repairRound: 0,
+      currentFeatureId: null,
+      currentContractPath: null,
+      currentContractJsonPath: null,
+      currentEvalPath: null,
+      currentEvalJsonPath: null,
+      currentVerdictPath: null,
+      summary: 'All features complete.',
+      metrics: {},
+      generatorSessionIds: {},
+      currentNegotiation: null,
+      smokeInstalledAt: null,
+    }, null, 2),
+  );
+
+  const evalCase = {
+    version: 1,
+    id: 'synthetic-objective',
+    category: 'cli',
+    prompt: 'Synthetic objective checks',
+    objectiveChecks: [
+      {
+        id: 'expected-failure',
+        command: 'node -e "console.error(\'expected diagnostic\'); process.exit(7)"',
+        expectedExitCode: 7,
+        stderrIncludes: ['expected diagnostic'],
+      },
+      {
+        id: 'missing-output',
+        command: 'node -e "console.log(\'actual output\')"',
+        outputIncludes: ['needle'],
+      },
+    ],
+    judgeRubric: {
+      version: 1,
+      scale: { 1: 'bad', 5: 'good' },
+      dimensions: [{ id: 'taskFulfillment', description: 'Task fulfillment' }],
+    },
+  };
+
+  const packet = await buildEvalRunPacket({ runDir, workspace: tempRoot, evalCase, runObjectiveChecks: true });
+
+  assert.equal(packet.objectiveChecks.length, 2);
+  assert.equal(packet.objectiveChecks[0].ok, true);
+  assert.equal(packet.objectiveChecks[0].exitCode, 7);
+  assert.equal(packet.objectiveChecks[0].expectedExitCode, 7);
+  assert.equal(packet.objectiveChecks[0].required, true);
+  assert.deepEqual(packet.objectiveChecks[0].failures, []);
+  assert.equal(packet.objectiveChecks[1].ok, false);
+  assert.match(packet.objectiveChecks[1].failures.join('\n'), /combined output did not include "needle"/);
+});

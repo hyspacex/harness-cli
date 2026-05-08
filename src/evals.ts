@@ -45,6 +45,10 @@ export interface EvalObjectiveCheck {
   cwd?: string;
   timeoutMs?: number;
   required?: boolean;
+  expectedExitCode?: number;
+  stdoutIncludes?: string[];
+  stderrIncludes?: string[];
+  outputIncludes?: string[];
 }
 
 export interface EvalJudgeRubricDimension {
@@ -87,11 +91,14 @@ export interface EvalObjectiveCheckResult {
   id: string;
   command: string;
   cwd: string;
+  required: boolean;
+  expectedExitCode: number;
   ok: boolean;
   exitCode: number;
   durationMs: number;
   stdout: string;
   stderr: string;
+  failures: string[];
 }
 
 export interface EvalArtifactSummary {
@@ -230,6 +237,15 @@ export async function readEvalCase(filePath: string): Promise<HarnessEvalCase> {
     for (const check of checks) {
       if (!isPlainObject(check) || typeof check.command !== 'string' || !check.command) {
         throw new Error(`Eval case ${value.id} contains an invalid objective check`);
+      }
+      if (check.expectedExitCode !== undefined && typeof check.expectedExitCode !== 'number') {
+        throw new Error(`Eval case ${value.id} objective check expectedExitCode must be a number`);
+      }
+      for (const field of ['stdoutIncludes', 'stderrIncludes', 'outputIncludes'] as const) {
+        const needles = check[field];
+        if (needles !== undefined && (!Array.isArray(needles) || !needles.every((item) => typeof item === 'string'))) {
+          throw new Error(`Eval case ${value.id} objective check ${field} must be an array of strings`);
+        }
       }
     }
   }
@@ -457,6 +473,10 @@ export function renderEvalRunPacketMarkdown(packet: EvalRunPacket): string {
       lines.push(`- ${check.id}: ${check.ok ? 'pass' : 'fail'} (${check.durationMs}ms)`);
       if (!check.ok) {
         lines.push(`  command: ${check.command}`);
+        lines.push(`  expected exit: ${check.expectedExitCode}; actual exit: ${check.exitCode}`);
+        for (const failure of check.failures) {
+          lines.push(`  failure: ${failure}`);
+        }
         lines.push(`  stderr: ${truncate(check.stderr || '(empty)', 500)}`);
       }
     }
@@ -754,37 +774,91 @@ async function runObjectiveChecks(
   for (const [index, check] of checks.entries()) {
     const startedAt = Date.now();
     const cwd = resolveCheckCwd(workspace, check.cwd);
+    const expectedExitCode = check.expectedExitCode ?? 0;
     try {
       const { stdout, stderr } = await execAsync(check.command, {
         cwd,
         timeout: check.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
         maxBuffer: DEFAULT_COMMAND_BUFFER,
       });
+      const failures = evaluateObjectiveCheckOutput({
+        check,
+        exitCode: 0,
+        expectedExitCode,
+        stdout,
+        stderr,
+      });
       results.push({
         id: check.id || `check-${index + 1}`,
         command: check.command,
         cwd,
-        ok: true,
+        required: check.required !== false,
+        expectedExitCode,
+        ok: failures.length === 0,
         exitCode: 0,
         durationMs: Date.now() - startedAt,
         stdout: redactSensitiveText(truncate(stdout || '', 4000)) || '',
         stderr: redactSensitiveText(truncate(stderr || '', 4000)) || '',
+        failures,
       });
     } catch (error) {
       const execError = error as Error & { stdout?: string; stderr?: string; code?: number };
+      const exitCode = typeof execError.code === 'number' ? execError.code : 1;
+      const stdout = execError.stdout || '';
+      const stderr = execError.stderr || execError.message || '';
+      const failures = evaluateObjectiveCheckOutput({
+        check,
+        exitCode,
+        expectedExitCode,
+        stdout,
+        stderr,
+      });
       results.push({
         id: check.id || `check-${index + 1}`,
         command: check.command,
         cwd,
-        ok: false,
-        exitCode: typeof execError.code === 'number' ? execError.code : 1,
+        required: check.required !== false,
+        expectedExitCode,
+        ok: failures.length === 0,
+        exitCode,
         durationMs: Date.now() - startedAt,
-        stdout: redactSensitiveText(truncate(execError.stdout || '', 4000)) || '',
-        stderr: redactSensitiveText(truncate(execError.stderr || execError.message || '', 4000)) || '',
+        stdout: redactSensitiveText(truncate(stdout, 4000)) || '',
+        stderr: redactSensitiveText(truncate(stderr, 4000)) || '',
+        failures,
       });
     }
   }
   return results;
+}
+
+function evaluateObjectiveCheckOutput(options: {
+  check: EvalObjectiveCheck;
+  exitCode: number;
+  expectedExitCode: number;
+  stdout: string;
+  stderr: string;
+}): string[] {
+  const failures: string[] = [];
+  if (options.exitCode !== options.expectedExitCode) {
+    failures.push(`expected exit ${options.expectedExitCode}, got ${options.exitCode}`);
+  }
+  for (const needle of options.check.stdoutIncludes || []) {
+    if (!options.stdout.includes(needle)) {
+      failures.push(`stdout did not include ${JSON.stringify(needle)}`);
+    }
+  }
+  for (const needle of options.check.stderrIncludes || []) {
+    if (!options.stderr.includes(needle)) {
+      failures.push(`stderr did not include ${JSON.stringify(needle)}`);
+    }
+  }
+  const output = `${options.stdout}\n${options.stderr}`;
+  for (const needle of options.check.outputIncludes || []) {
+    if (!output.includes(needle)) {
+      failures.push(`combined output did not include ${JSON.stringify(needle)}`);
+    }
+  }
+  return failures;
 }
 
 function redactSensitiveText(value: string | null | undefined): string | null {

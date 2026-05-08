@@ -198,7 +198,32 @@ test('matrix report mode rebuilds packets, results, and comparisons from a plan'
 
   assert.equal(result.results.length, 2);
   assert.equal(result.comparisons.length, 1);
+  assert.equal(result.shipGate.status, 'fail');
+  assert.equal(result.shipGate.ok, false);
+  assert.ok(result.shipGate.checks.some((check) => check.id === 'all-runs-completed' && check.status === 'fail'));
   assert.match(report, /fast vs visual-qa/);
+  assert.match(report, /Good Enough To Ship Gate/);
   await fs.access(path.join(outDir, 'packets', evalCase.id, 'fast', 'packet.json'));
   await fs.access(path.join(result.comparisons[0].outDir, 'judge-prompt.md'));
+});
+
+test('matrix dry-run plans isolated per-profile run roots', async () => {
+  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-matrix-isolation-'));
+
+  await runEvalMatrix({
+    case: 'examples-adaptive-dashboard-filtering',
+    profiles: 'balanced,codex-only',
+    out: outDir,
+    'dry-run': 'true',
+  }, ['matrix']);
+
+  const plan = JSON.parse(await fs.readFile(path.join(outDir, 'matrix-plan.json'), 'utf8'));
+  assert.equal(plan.runs.length, 2);
+  for (const run of plan.runs) {
+    assert.match(run.isolationRoot, /isolates/);
+    assert.match(run.workspace, /isolates/);
+    assert.match(run.runRoot, /isolates/);
+    assert.match(run.workspace, new RegExp(`${run.profile}/workspace$`));
+    assert.match(run.runRoot, new RegExp(`${run.profile}/run-root$`));
+  }
 });

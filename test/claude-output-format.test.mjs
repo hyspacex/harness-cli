@@ -34,3 +34,22 @@ test('claude output format keeps implementation tasks permissive but structured'
   assert.deepEqual(outputFormat.schema.required, ['status', 'summary']);
   assert.equal(outputFormat.schema.additionalProperties, true);
 });
+
+test('claude output format uses pairwise judge schema for meta and matrix judges', () => {
+  for (const label of ['meta-judge-examples-adaptive-dashboard-filtering', 'matrix-judge-harness-cli-error-ergonomics']) {
+    const outputFormat = buildClaudeTaskOutputFormat({
+      kind: 'evaluator',
+      label,
+    });
+
+    assert.deepEqual(outputFormat.schema.required, [
+      'winner',
+      'confidence',
+      'dimensionScores',
+      'criticalRegressions',
+      'rationale',
+    ]);
+    assert.deepEqual(outputFormat.schema.properties.winner.enum, ['A', 'B', 'tie', 'inconclusive']);
+    assert.equal(outputFormat.schema.properties.dimensionScores.type, 'object');
+  }
+});

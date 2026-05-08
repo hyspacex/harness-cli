@@ -44,6 +44,7 @@ The judge receives two blinded packets and outputs structured JSON:
 ```json
 {
   "version": 1,
+  "evaluationSpecHash": "90b4389cb60dbedb1c566adcd64aa78dab95f68b61cb5e78cdd8d2f537c73f91",
   "winner": "A",
   "confidence": 4,
   "dimensionScores": {
@@ -60,6 +61,69 @@ The judge receives two blinded packets and outputs structured JSON:
 
 The primary result is pairwise: win, loss, tie, or inconclusive.
 
+## Current Workflow
+
+The CLI currently compares existing run directories. It does not yet create baseline/candidate worktrees or run every case automatically.
+
+List cases:
+
+```bash
+npm run harness -- eval list
+```
+
+Run the harness for a case manually. Use the case prompt and matching sprint budget from the case JSON:
+
+```bash
+npm run harness -- run \
+  "Improve the AWS learning platform adaptive dashboard with saved filters, clear empty states, and keyboard-accessible filtering. Keep the existing tutor and quiz flows working." \
+  --config harness.config.json \
+  --workspace /tmp/candidate-workspace \
+  --run-root /tmp/candidate-runs \
+  --max-sprints 4
+```
+
+Build a packet for an existing run:
+
+```bash
+npm run harness -- eval packet /tmp/candidate-runs/runs/<run-id> \
+  --case examples-adaptive-dashboard-filtering \
+  --workspace /tmp/candidate-workspace \
+  --out /tmp/candidate-packet.json \
+  --markdown \
+  --objective-checks true
+```
+
+Compare two runs without calling a judge:
+
+```bash
+npm run harness -- eval compare \
+  --case examples-adaptive-dashboard-filtering \
+  --a /tmp/baseline-runs/runs/<run-id> \
+  --b /tmp/candidate-runs/runs/<run-id> \
+  --out /tmp/harness-eval-compare
+```
+
+Compare two runs with an LLM judge:
+
+```bash
+npm run harness -- eval compare \
+  --case examples-adaptive-dashboard-filtering \
+  --a /tmp/baseline-runs/runs/<run-id> \
+  --b /tmp/candidate-runs/runs/<run-id> \
+  --workspace /tmp/candidate-workspace \
+  --out /tmp/harness-eval-compare \
+  --judge-provider claude-sdk \
+  --objective-checks true
+```
+
+The compare output directory contains:
+
+- `packet-a.json` / `packet-a.md`
+- `packet-b.json` / `packet-b.md`
+- `judge-prompt.md`
+- `judge-result.json`
+- `judge-raw.txt`, when a judge provider was used
+
 ## Why Pairwise Judging
 
 Absolute LLM grades are too unstable for this harness because:
@@ -73,7 +137,7 @@ Pairwise comparison controls this by running baseline and candidate under the sa
 
 ## Evaluation Dimensions
 
-The judge must score both product outcome and harness process:
+The judge must score both product outcome and harness process. The default starter cases currently use:
 
 - `taskFulfillment`: whether the final workspace satisfies the user request.
 - `correctness`: whether objective behavior, tests, smoke checks, and core requirements hold.
@@ -84,6 +148,19 @@ The judge must score both product outcome and harness process:
 This separation is important because final product quality alone can hide harness regressions.
 
 Each case also stores an `evaluationSpecHash` derived from the prompt, objective checks, and locked `judgeRubric`. Compare artifacts include this hash in both packets and the judge result. If this hash changes between a baseline and candidate comparison, the result should be treated as a different eval, not a before/after measurement.
+
+## Rubric Stability
+
+For a given case, the meta-eval rubric is fixed before any harness run starts. The harness can still generate project-specific `plan/eval-criteria.json`, sprint contracts, and pass bar overrides; those artifacts are useful evidence about the run, but they do not define the meta-eval scoring rubric.
+
+When comparing baseline and candidate runs:
+
+- Do not edit the case `prompt`.
+- Do not edit `objectiveChecks`.
+- Do not edit `judgeRubric`.
+- Verify that `packet-a.json`, `packet-b.json`, and `judge-result.json` have the same `evaluationSpecHash`.
+
+If the case needs a better rubric, update it intentionally and treat the next result as a new benchmark generation. Do not mix old and new rubric results in the same trend line.
 
 ## Eval Case Shape
 
@@ -192,21 +269,58 @@ PR runs should use a short subset. Nightly runs can use the full suite and repet
 - Run optional A/B and B/A swapped judge prompts for position-bias checks.
 - Treat low-confidence or order-flipped results as inconclusive.
 
-## First Implementation Slice
+## Objective Checks
 
-The first implementation provides:
+Objective checks are run while building packets, not during the original harness run. They should be deterministic and cheap enough to repeat.
+
+Prefer checks that are either:
+
+- baseline-clean, such as `npm run typecheck` when the fixture typechecks before any harness work
+- case-scoped, such as a focused test file that exercises the requested behavior
+
+Avoid broad checks that fail for unrelated fixture issues unless the failure itself is part of the case. A noisy check can still be useful evidence, but it should be documented in the case notes or fixed at the fixture level before using the case as a regression benchmark.
+
+Objective checks can assert expected failures and output, not just successful commands. This is important for CLI cases where the correct behavior is a non-zero exit with a clear diagnostic:
+
+```json
+{
+  "id": "numeric-zero",
+  "command": "node ./dist/cli.js run probe --max-repair-rounds 0",
+  "expectedExitCode": 1,
+  "outputIncludes": ["--max-repair-rounds", "0"],
+  "timeoutMs": 5000
+}
+```
+
+Supported expectation fields are:
+
+- `expectedExitCode`: defaults to `0`
+- `stdoutIncludes`: strings that must appear in stdout
+- `stderrIncludes`: strings that must appear in stderr
+- `outputIncludes`: strings that may appear in either stream
+
+Required objective-check failures are treated as release-gating failures in matrix reports.
+
+## Current CLI Surface
+
+The current implementation provides:
 
 - `harness eval list`
-- `harness eval packet <runDir> --case <caseId|path> --out <packet.json>`
-- `harness eval compare --case <caseId|path> --a <runDir> --b <runDir> --out <dir>`
+- `harness eval packet <runDir> --case <caseId|path> --out <packet.json> --markdown --objective-checks true`
+- `harness eval compare --case <caseId|path> --a <runDir> --b <runDir> --out <dir> --objective-checks true`
+- `harness eval matrix --case <caseId|path|all> --profiles <selection> --execute true`
+- `harness eval matrix report --from <matrixOutDir> --objective-checks true`
 - optional LLM judging with `--judge-provider claude-sdk|codex`
 - dry-mode prompt generation when no judge provider is supplied
 
-The later implementation layer should add:
+Matrix mode defaults each case/profile run into `isolates/<case>/<profile>/workspace` and `isolates/<case>/<profile>/run-root`, unless `--in-place true` or `--run-root` overrides that layout. This does not replace OS-level sandboxing, but it makes accidental profile artifact reuse easier to avoid and audit.
+
+Matrix results include `shipGate` in `matrix-result.json` and a "Good Enough To Ship Gate" section in `matrix-result.md`. The gate fails on incomplete runs, missing packets, failed required objective checks, judge errors, or shared profile workspaces/run directories. It warns when objective checks or LLM judging were intentionally omitted. See [eval-release-gates.md](eval-release-gates.md) for the release checklist.
+
+The next implementation layer should add:
 
 - baseline/candidate git worktree orchestration
-- fixture copy/reset
 - repeated runs
 - swapped judge prompts
 - aggregate reports across cases
-- CI-friendly thresholds
+- stronger OS-level sandbox isolation

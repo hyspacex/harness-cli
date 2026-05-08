@@ -21,6 +21,54 @@
       "command": "npm run build:harness",
       "cwd": ".",
       "timeoutMs": 120000
+    },
+    {
+      "id": "unknown-command",
+      "command": "node ./dist/cli.js rn",
+      "cwd": ".",
+      "timeoutMs": 5000,
+      "expectedExitCode": 1,
+      "outputIncludes": ["Unknown command", "rn"]
+    },
+    {
+      "id": "unknown-eval-subcommand",
+      "command": "node ./dist/cli.js eval frobnicate",
+      "cwd": ".",
+      "timeoutMs": 5000,
+      "expectedExitCode": 1,
+      "outputIncludes": ["frobnicate"]
+    },
+    {
+      "id": "missing-provider-value",
+      "command": "node ./dist/cli.js run probe --provider",
+      "cwd": ".",
+      "timeoutMs": 5000,
+      "expectedExitCode": 1,
+      "outputIncludes": ["--provider", "value"]
+    },
+    {
+      "id": "numeric-nan",
+      "command": "node ./dist/cli.js run probe --max-sprints nope",
+      "cwd": ".",
+      "timeoutMs": 5000,
+      "expectedExitCode": 1,
+      "outputIncludes": ["--max-sprints", "nope"]
+    },
+    {
+      "id": "numeric-zero",
+      "command": "node ./dist/cli.js run probe --max-repair-rounds 0",
+      "cwd": ".",
+      "timeoutMs": 5000,
+      "expectedExitCode": 1,
+      "outputIncludes": ["--max-repair-rounds", "0"]
+    },
+    {
+      "id": "numeric-negative",
+      "command": "node ./dist/cli.js run probe --max-negotiation-rounds -1",
+      "cwd": ".",
+      "timeoutMs": 5000,
+      "expectedExitCode": 1,
+      "outputIncludes": ["--max-negotiation-rounds", "-1"]
     }
   ],
   "judgeFocus": [

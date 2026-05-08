@@ -42,6 +42,7 @@ interface MatrixRunPlan {
   profile: string;
   profileDescription: string;
   prompt: string;
+  isolationRoot: string;
   workspace: string;
   runRoot: string;
   command: string;
@@ -106,6 +107,22 @@ interface MatrixResultFile {
   builtAt: string;
   results: MatrixRunResult[];
   comparisons: MatrixComparisonResult[];
+  shipGate: MatrixShipGate;
+}
+
+type MatrixGateStatus = 'pass' | 'warning' | 'fail';
+
+interface MatrixShipGateCheck {
+  id: string;
+  status: MatrixGateStatus;
+  message: string;
+}
+
+interface MatrixShipGate {
+  version: 1;
+  status: MatrixGateStatus;
+  ok: boolean;
+  checks: MatrixShipGateCheck[];
 }
 
 export async function runEvalMatrix(flags: Record<string, string>, positionals: string[]): Promise<void> {
@@ -149,18 +166,19 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
       const profile = resolveExecutionProfile(profileName, baseConfig.profiles);
       const caseSlug = slugify(evalCase.id);
       const profileSlug = slugify(profileName);
+      const isolationRoot = path.join(outDir, 'isolates', caseSlug, profileSlug);
       const workspace = await resolveMatrixWorkspace({
         evalCase,
         profileName,
         baseWorkspace: baseConfig.workspace,
         outDir,
+        isolationRoot,
         execute,
         flags,
       });
-      const runRootBase = flags['run-root']
-        ? path.resolve(flags['run-root'])
-        : path.join(outDir, 'run-roots');
-      const runRoot = path.join(runRootBase, caseSlug, profileSlug);
+      const runRoot = flags['run-root']
+        ? path.join(path.resolve(flags['run-root']), caseSlug, profileSlug)
+        : path.join(isolationRoot, 'run-root');
       const caseOverrides = (evalCase.harnessConfig || {}) as Partial<HarnessConfig>;
       const matrixOverrides = deepMerge(
         caseOverrides,
@@ -178,6 +196,7 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
         profile: profileName,
         profileDescription: profile.description,
         prompt: evalCase.prompt,
+        isolationRoot,
         workspace: config.workspace,
         runRoot: config.runRoot,
         command: renderMatrixRunCommand(evalCase, profileName, outDir, flags),
@@ -306,6 +325,12 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
           builtAt: new Date().toISOString(),
           results,
           comparisons: [],
+          shipGate: buildMatrixShipGate({
+            results,
+            comparisons: [],
+            packetizedRuns,
+            judgeProvider,
+          }),
         });
         throw error;
       }
@@ -324,6 +349,12 @@ export async function runEvalMatrix(flags: Record<string, string>, positionals: 
     builtAt: new Date().toISOString(),
     results,
     comparisons,
+    shipGate: buildMatrixShipGate({
+      results,
+      comparisons,
+      packetizedRuns,
+      judgeProvider,
+    }),
   });
   console.log(`Matrix results: ${path.join(outDir, 'matrix-result.json')}`);
   if (comparisons.length > 0) {
@@ -408,6 +439,12 @@ async function reportEvalMatrix(flags: Record<string, string>, positionals: stri
     builtAt: new Date().toISOString(),
     results,
     comparisons,
+    shipGate: buildMatrixShipGate({
+      results,
+      comparisons,
+      packetizedRuns,
+      judgeProvider,
+    }),
   });
   console.log(`Matrix results: ${path.join(outDir, 'matrix-result.json')}`);
   console.log(`Matrix report: ${path.join(outDir, 'matrix-result.md')}`);
@@ -426,6 +463,15 @@ function renderMatrixResultMarkdown(result: MatrixResultFile): string {
   lines.push('# Eval Matrix Result');
   lines.push('');
   lines.push(`Built at: ${result.builtAt}`);
+  lines.push('');
+  lines.push('## Good Enough To Ship Gate');
+  lines.push('');
+  lines.push(`Status: ${result.shipGate.status}`);
+  lines.push(`OK: ${result.shipGate.ok ? 'yes' : 'no'}`);
+  lines.push('');
+  for (const check of result.shipGate.checks) {
+    lines.push(`- ${check.status}: ${check.id} — ${check.message}`);
+  }
   lines.push('');
   lines.push('## Runs');
   lines.push('');
@@ -463,6 +509,94 @@ function renderMatrixResultMarkdown(result: MatrixResultFile): string {
   }
 
   return `${lines.join('\n').trim()}\n`;
+}
+
+function buildMatrixShipGate(options: {
+  results: MatrixRunResult[];
+  comparisons: MatrixComparisonResult[];
+  packetizedRuns: PacketizedMatrixRun[];
+  judgeProvider: ProviderName | undefined;
+}): MatrixShipGate {
+  const checks: MatrixShipGateCheck[] = [];
+  const failedRuns = options.results.filter((result) => !result.ok);
+  checks.push({
+    id: 'all-runs-completed',
+    status: failedRuns.length === 0 ? 'pass' : 'fail',
+    message: failedRuns.length === 0
+      ? 'Every planned run completed successfully.'
+      : `${failedRuns.length} run(s) failed, were missing, or did not complete.`,
+  });
+
+  const packetFailures = options.results.filter((result) => result.packetError || (result.runDir && !result.packetPath));
+  checks.push({
+    id: 'packets-built',
+    status: packetFailures.length === 0 ? 'pass' : 'fail',
+    message: packetFailures.length === 0
+      ? 'Packets were built for every run with a run directory.'
+      : `${packetFailures.length} run(s) are missing usable packet artifacts.`,
+  });
+
+  const objectiveChecks = options.packetizedRuns.flatMap((run) => run.packet.objectiveChecks);
+  const requiredObjectiveFailures = objectiveChecks.filter((check) => check.required && !check.ok);
+  checks.push({
+    id: 'required-objective-checks',
+    status: objectiveChecks.length === 0
+      ? 'warning'
+      : requiredObjectiveFailures.length === 0
+        ? 'pass'
+        : 'fail',
+    message: objectiveChecks.length === 0
+      ? 'No objective checks were run; rerun with --objective-checks true for release evidence.'
+      : requiredObjectiveFailures.length === 0
+        ? `${objectiveChecks.length} objective check result(s) passed.`
+        : `${requiredObjectiveFailures.length} required objective check(s) failed.`,
+  });
+
+  const judgeErrors = options.comparisons.filter((comparison) => comparison.error);
+  const dryComparisons = options.comparisons.filter((comparison) => comparison.judge === 'dry-run');
+  checks.push({
+    id: 'pairwise-judging',
+    status: options.comparisons.length === 0
+      ? 'warning'
+      : judgeErrors.length > 0
+        ? 'fail'
+        : dryComparisons.length > 0 || !options.judgeProvider
+          ? 'warning'
+          : 'pass',
+    message: options.comparisons.length === 0
+      ? 'No pairwise comparisons were written; use at least two packetized profiles for comparative evidence.'
+      : judgeErrors.length > 0
+        ? `${judgeErrors.length} pairwise judge comparison(s) failed.`
+        : dryComparisons.length > 0 || !options.judgeProvider
+          ? 'Comparisons are dry-run prompts only; rerun with --judge-provider for judged evidence.'
+          : `${options.comparisons.length} judged pairwise comparison(s) completed.`,
+  });
+
+  const workspaces = options.packetizedRuns.map((run) => path.resolve(run.packet.run.workspace));
+  const runDirs = options.packetizedRuns.map((run) => path.resolve(run.packet.run.runDir));
+  const uniqueWorkspaces = new Set(workspaces);
+  const uniqueRunDirs = new Set(runDirs);
+  checks.push({
+    id: 'profile-artifact-isolation',
+    status: uniqueWorkspaces.size === workspaces.length && uniqueRunDirs.size === runDirs.length
+      ? 'pass'
+      : 'fail',
+    message: uniqueWorkspaces.size === workspaces.length && uniqueRunDirs.size === runDirs.length
+      ? 'Each packetized profile has a distinct workspace and run directory.'
+      : 'At least two packetized profiles share a workspace or run directory.',
+  });
+
+  const status: MatrixGateStatus = checks.some((check) => check.status === 'fail')
+    ? 'fail'
+    : checks.some((check) => check.status === 'warning')
+      ? 'warning'
+      : 'pass';
+  return {
+    version: 1,
+    status,
+    ok: status === 'pass',
+    checks,
+  };
 }
 
 async function writeMatrixRunPacket(options: {
@@ -661,6 +795,7 @@ async function resolveMatrixWorkspace(options: {
   profileName: string;
   baseWorkspace: string;
   outDir: string;
+  isolationRoot: string;
   execute: boolean;
   flags: Record<string, string>;
 }): Promise<string> {
@@ -671,7 +806,10 @@ async function resolveMatrixWorkspace(options: {
   );
 
   if (!options.execute || flagEnabled(options.flags, 'in-place')) {
-    return sourceWorkspace;
+    if (flagEnabled(options.flags, 'in-place')) {
+      return sourceWorkspace;
+    }
+    return path.join(options.isolationRoot, 'workspace');
   }
 
   if (!options.evalCase.workspaceFixture && !options.flags.workspace) {
@@ -681,10 +819,8 @@ async function resolveMatrixWorkspace(options: {
   }
 
   const destination = path.join(
-    options.outDir,
-    'workspaces',
-    slugify(options.evalCase.id),
-    slugify(options.profileName),
+    options.isolationRoot,
+    'workspace',
   );
   if ((await fileExists(destination)) && !flagEnabled(options.flags, 'force')) {
     throw new Error(`Workspace destination already exists: ${destination}. Use --force true to overwrite.`);
@@ -757,6 +893,7 @@ function renderMatrixPlanMarkdown(plan: {
     lines.push(`Title: ${run.caseTitle}`);
     lines.push(`Category: ${run.category}`);
     lines.push(`Profile: ${run.profileDescription}`);
+    lines.push(`Isolation root: ${run.isolationRoot}`);
     lines.push(`Workspace: ${run.workspace}`);
     lines.push(`Run root: ${run.runRoot}`);
     lines.push(`Provider: ${run.configSummary.provider}`);

@@ -197,7 +197,29 @@ export function buildClaudeTaskOutputFormat(task: Pick<TaskDefinition, 'kind' | 
     required: ['summary'],
   };
 
-  if (task.label.startsWith('contract-review')) {
+  if (isPairwiseJudgeTask(task)) {
+    schema.required = ['winner', 'confidence', 'dimensionScores', 'criticalRegressions', 'rationale'];
+    Object.assign(schema.properties as Record<string, unknown>, {
+      version: { type: 'number' },
+      winner: { type: 'string', enum: ['A', 'B', 'tie', 'inconclusive'] },
+      confidence: { type: 'number', minimum: 1, maximum: 5 },
+      evaluationSpecHash: { type: 'string' },
+      dimensionScores: {
+        type: 'object',
+        additionalProperties: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            A: { type: 'number', minimum: 1, maximum: 5 },
+            B: { type: 'number', minimum: 1, maximum: 5 },
+          },
+          required: ['A', 'B'],
+        },
+      },
+      criticalRegressions: stringArrayProperty,
+      rationale: summaryProperty,
+    });
+  } else if (task.label.startsWith('contract-review')) {
     schema.required = ['status', 'summary', 'feedback'];
     (schema.properties as Record<string, unknown>).status = { type: 'string', enum: ['approved', 'revise'] };
   } else if (task.kind === 'evaluator') {
@@ -232,4 +254,8 @@ export function buildClaudeTaskOutputFormat(task: Pick<TaskDefinition, 'kind' | 
     type: 'json_schema',
     schema,
   };
+}
+
+function isPairwiseJudgeTask(task: Pick<TaskDefinition, 'label'>): boolean {
+  return task.label.startsWith('meta-judge-') || task.label.startsWith('matrix-judge-');
 }
