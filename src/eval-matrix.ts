@@ -511,7 +511,7 @@ function renderMatrixResultMarkdown(result: MatrixResultFile): string {
   return `${lines.join('\n').trim()}\n`;
 }
 
-function buildMatrixShipGate(options: {
+export function buildMatrixShipGate(options: {
   results: MatrixRunResult[];
   comparisons: MatrixComparisonResult[];
   packetizedRuns: PacketizedMatrixRun[];

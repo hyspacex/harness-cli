@@ -5,9 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { computeEvaluationSpecHash, findEvalCase } from '../dist/evals.js';
-import { copyMatrixWorkspace, runEvalMatrix, writeMatrixComparisons } from '../dist/eval-matrix.js';
+import { buildMatrixShipGate, copyMatrixWorkspace, runEvalMatrix, writeMatrixComparisons } from '../dist/eval-matrix.js';
 
-function makePacket(evalCase, profile) {
+function makePacket(evalCase, profile, options = {}) {
   const specHash = computeEvaluationSpecHash(evalCase);
   return {
     version: 1,
@@ -32,8 +32,8 @@ function makePacket(evalCase, profile) {
         generator: profile === 'visual-qa' ? 'codex' : 'claude-sdk',
         evaluator: 'claude-sdk',
       },
-      workspace: '/tmp/workspace',
-      runDir: `/tmp/${profile}-run`,
+      workspace: options.workspace ?? '/tmp/workspace',
+      runDir: options.runDir ?? `/tmp/${profile}-run`,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       sprint: 1,
@@ -41,7 +41,7 @@ function makePacket(evalCase, profile) {
       summary: `${profile} completed.`,
       lastError: null,
     },
-    objectiveChecks: [],
+    objectiveChecks: options.objectiveChecks ?? [],
     metrics: {},
     artifacts: [],
   };
@@ -205,6 +205,80 @@ test('matrix report mode rebuilds packets, results, and comparisons from a plan'
   assert.match(report, /Good Enough To Ship Gate/);
   await fs.access(path.join(outDir, 'packets', evalCase.id, 'fast', 'packet.json'));
   await fs.access(path.join(result.comparisons[0].outDir, 'judge-prompt.md'));
+});
+
+test('matrix ship gate passes when every check is green', async () => {
+  const evalCase = await findEvalCase('examples-adaptive-dashboard-filtering');
+  const passingCheck = {
+    id: 'smoke',
+    command: 'true',
+    cwd: '/tmp',
+    required: true,
+    expectedExitCode: 0,
+    ok: true,
+    exitCode: 0,
+    durationMs: 1,
+    stdout: '',
+    stderr: '',
+    failures: [],
+  };
+  const fastPacket = makePacket(evalCase, 'fast', {
+    workspace: '/tmp/fast/workspace',
+    runDir: '/tmp/fast/run',
+    objectiveChecks: [passingCheck],
+  });
+  const visualPacket = makePacket(evalCase, 'visual-qa', {
+    workspace: '/tmp/visual-qa/workspace',
+    runDir: '/tmp/visual-qa/run',
+    objectiveChecks: [passingCheck],
+  });
+
+  const results = [
+    {
+      caseId: evalCase.id,
+      profile: 'fast',
+      ok: true,
+      status: 'completed',
+      runDir: fastPacket.run.runDir,
+      packetPath: '/tmp/fast/packet.json',
+      packetMarkdownPath: '/tmp/fast/packet.md',
+    },
+    {
+      caseId: evalCase.id,
+      profile: 'visual-qa',
+      ok: true,
+      status: 'completed',
+      runDir: visualPacket.run.runDir,
+      packetPath: '/tmp/visual-qa/packet.json',
+      packetMarkdownPath: '/tmp/visual-qa/packet.md',
+    },
+  ];
+
+  const gate = buildMatrixShipGate({
+    results,
+    comparisons: [
+      {
+        caseId: evalCase.id,
+        profileA: 'fast',
+        profileB: 'visual-qa',
+        outDir: '/tmp/cmp',
+        judge: 'claude-sdk',
+        winner: 'B',
+        confidence: 4,
+      },
+    ],
+    packetizedRuns: [
+      { evalCase, profileName: 'fast', runResult: results[0], packet: fastPacket },
+      { evalCase, profileName: 'visual-qa', runResult: results[1], packet: visualPacket },
+    ],
+    judgeProvider: 'claude-sdk',
+  });
+
+  assert.equal(gate.status, 'pass');
+  assert.equal(gate.ok, true);
+  for (const check of gate.checks) {
+    assert.equal(check.status, 'pass', `expected ${check.id} to pass: ${check.message}`);
+  }
 });
 
 test('matrix dry-run plans isolated per-profile run roots', async () => {

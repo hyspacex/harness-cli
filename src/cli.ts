@@ -64,8 +64,10 @@ async function main(): Promise<void> {
     }
     case 'help':
     case undefined:
-    default:
       printHelp();
+      return;
+    default:
+      throw new Error(`Unknown command: ${command}. Run "harness help" to see available commands.`);
   }
 }
 
