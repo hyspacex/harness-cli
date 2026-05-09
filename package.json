@@ -13,6 +13,7 @@
     "build:harness": "tsc -p tsconfig.json",
     "harness": "npm run build:harness --silent && node ./dist/cli.js",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test": "node --test test/*.mjs",
     "parse-gtfs": "node scripts/parse-gtfs.mjs"
   },
   "engines": {
