@@ -12,6 +12,7 @@ import {
   listEvalCases,
   normalizeJudgeResult,
   parseJudgeJson,
+  redactSensitiveText,
   writeEvalRunPacket,
   writeJudgeComparisonArtifacts,
 } from './evals.js';
@@ -750,7 +751,7 @@ async function runMatrixJudge(options: {
     kind: 'evaluator',
     label: `matrix-judge-${options.evalCase.id}`,
     cwd: process.cwd(),
-    prompt: options.prompt,
+    prompt: redactSensitiveText(options.prompt) || '',
     artifacts: {},
   });
   const parsed = result.parsed || parseJudgeJson(result.rawText);

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { exec as execCallback } from 'node:child_process';
+import { exec as execCallback, execFile as execFileCallback } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { RunState } from './types.js';
@@ -21,6 +21,7 @@ import {
 } from './utils.js';
 
 const execAsync = promisify(execCallback);
+const execFileAsync = promisify(execFileCallback);
 
 const DEFAULT_CASES_DIR = 'evals/cases';
 const DEFAULT_MAX_ARTIFACTS = 80;
@@ -41,7 +42,8 @@ const TEXT_EXTENSIONS = new Set([
 
 export interface EvalObjectiveCheck {
   id?: string;
-  command: string;
+  command?: string;
+  argv?: string[];
   cwd?: string;
   timeoutMs?: number;
   required?: boolean;
@@ -235,8 +237,24 @@ export async function readEvalCase(filePath: string): Promise<HarnessEvalCase> {
       throw new Error(`Eval case ${value.id} objectiveChecks must be an array`);
     }
     for (const check of checks) {
-      if (!isPlainObject(check) || typeof check.command !== 'string' || !check.command) {
+      if (!isPlainObject(check)) {
         throw new Error(`Eval case ${value.id} contains an invalid objective check`);
+      }
+      const hasCommand = typeof check.command === 'string' && check.command.length > 0;
+      const hasArgv = Array.isArray(check.argv) && check.argv.length > 0 && check.argv.every((item) => typeof item === 'string' && item.length > 0);
+      if (!hasCommand && !hasArgv) {
+        throw new Error(`Eval case ${value.id} objective check must provide either "command" (string) or "argv" (non-empty string[])`);
+      }
+      if (check.argv !== undefined && !hasArgv) {
+        throw new Error(`Eval case ${value.id} objective check argv must be a non-empty array of non-empty strings`);
+      }
+      if (check.cwd !== undefined) {
+        if (typeof check.cwd !== 'string' || check.cwd.length === 0) {
+          throw new Error(`Eval case ${value.id} objective check cwd must be a non-empty string`);
+        }
+        if (path.isAbsolute(check.cwd)) {
+          throw new Error(`Eval case ${value.id} objective check cwd must be relative to the workspace, got "${check.cwd}"`);
+        }
       }
       if (check.expectedExitCode !== undefined && typeof check.expectedExitCode !== 'number') {
         throw new Error(`Eval case ${value.id} objective check expectedExitCode must be a number`);
@@ -773,14 +791,42 @@ async function runObjectiveChecks(
   const results: EvalObjectiveCheckResult[] = [];
   for (const [index, check] of checks.entries()) {
     const startedAt = Date.now();
-    const cwd = resolveCheckCwd(workspace, check.cwd);
     const expectedExitCode = check.expectedExitCode ?? 0;
+    const id = check.id || `check-${index + 1}`;
+    const display = renderCheckCommand(check);
+    let cwd: string;
     try {
-      const { stdout, stderr } = await execAsync(check.command, {
-        cwd,
-        timeout: check.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
-        maxBuffer: DEFAULT_COMMAND_BUFFER,
+      cwd = resolveCheckCwd(workspace, check.cwd);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({
+        id,
+        command: display,
+        cwd: workspace,
+        required: check.required !== false,
+        expectedExitCode,
+        ok: false,
+        exitCode: -1,
+        durationMs: Date.now() - startedAt,
+        stdout: '',
+        stderr: redactSensitiveText(message) || '',
+        failures: [message],
       });
+      continue;
+    }
+    const timeout = check.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+    try {
+      const { stdout, stderr } = check.argv && check.argv.length > 0
+        ? await execFileAsync(check.argv[0], check.argv.slice(1), {
+            cwd,
+            timeout,
+            maxBuffer: DEFAULT_COMMAND_BUFFER,
+          })
+        : await execAsync(check.command || '', {
+            cwd,
+            timeout,
+            maxBuffer: DEFAULT_COMMAND_BUFFER,
+          });
       const failures = evaluateObjectiveCheckOutput({
         check,
         exitCode: 0,
@@ -789,8 +835,8 @@ async function runObjectiveChecks(
         stderr,
       });
       results.push({
-        id: check.id || `check-${index + 1}`,
-        command: check.command,
+        id,
+        command: display,
         cwd,
         required: check.required !== false,
         expectedExitCode,
@@ -814,8 +860,8 @@ async function runObjectiveChecks(
         stderr,
       });
       results.push({
-        id: check.id || `check-${index + 1}`,
-        command: check.command,
+        id,
+        command: display,
         cwd,
         required: check.required !== false,
         expectedExitCode,
@@ -829,6 +875,13 @@ async function runObjectiveChecks(
     }
   }
   return results;
+}
+
+function renderCheckCommand(check: EvalObjectiveCheck): string {
+  if (check.argv && check.argv.length > 0) {
+    return check.argv.join(' ');
+  }
+  return check.command || '';
 }
 
 function evaluateObjectiveCheckOutput(options: {
@@ -879,10 +932,19 @@ export function redactSensitiveText(value: string | null | undefined): string | 
 }
 
 function resolveCheckCwd(workspace: string, checkCwd: string | undefined): string {
+  const workspaceAbs = path.resolve(workspace);
   if (!checkCwd) {
-    return workspace;
+    return workspaceAbs;
   }
-  return path.isAbsolute(checkCwd) ? checkCwd : path.resolve(workspace, checkCwd);
+  if (path.isAbsolute(checkCwd)) {
+    throw new Error(`Objective check cwd must be relative to the workspace: "${checkCwd}"`);
+  }
+  const resolved = path.resolve(workspaceAbs, checkCwd);
+  const relative = path.relative(workspaceAbs, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Objective check cwd escapes workspace: "${checkCwd}"`);
+  }
+  return resolved;
 }
 
 function normalizeWinner(value: unknown): EvalWinner {

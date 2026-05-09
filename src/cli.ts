@@ -10,6 +10,7 @@ import {
   listEvalCases,
   normalizeJudgeResult,
   parseJudgeJson,
+  redactSensitiveText,
   writeEvalRunPacket,
   writeJudgeComparisonArtifacts,
 } from './evals.js';
@@ -246,7 +247,7 @@ async function runLlmJudge(
     kind: 'evaluator',
     label: `meta-judge-${caseId}`,
     cwd: process.cwd(),
-    prompt,
+    prompt: redactSensitiveText(prompt) || '',
     artifacts: {},
   });
   const parsed = result.parsed || parseJudgeJson(result.rawText);

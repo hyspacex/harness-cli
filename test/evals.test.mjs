@@ -220,3 +220,110 @@ test('objective checks can expect non-zero exits and required output', async () 
   assert.equal(packet.objectiveChecks[1].ok, false);
   assert.match(packet.objectiveChecks[1].failures.join('\n'), /combined output did not include "needle"/);
 });
+
+test('objective check argv form runs without a shell and rejects unsafe cwd', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-eval-argv-'));
+  const runDir = path.join(tempRoot, 'runs', 'argv-run');
+  await fs.mkdir(runDir, { recursive: true });
+  await fs.writeFile(
+    path.join(runDir, 'run.json'),
+    JSON.stringify({
+      id: 'argv-run',
+      prompt: 'argv',
+      provider: 'claude-sdk',
+      roleProviders: { researcher: 'claude-sdk', planner: 'claude-sdk', generator: 'claude-sdk', evaluator: 'claude-sdk' },
+      workspace: tempRoot,
+      runDir,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      status: 'completed',
+      lastError: null,
+      sprint: 1,
+      repairRound: 0,
+      currentFeatureId: null,
+      currentContractPath: null,
+      currentContractJsonPath: null,
+      currentEvalPath: null,
+      currentEvalJsonPath: null,
+      currentVerdictPath: null,
+      summary: 'done',
+      metrics: {},
+      generatorSessionIds: {},
+      currentNegotiation: null,
+      smokeInstalledAt: null,
+    }, null, 2),
+  );
+
+  const evalCase = {
+    version: 1,
+    id: 'argv-case',
+    category: 'cli',
+    prompt: 'argv form',
+    objectiveChecks: [
+      {
+        id: 'argv-pass',
+        argv: ['node', '-e', 'console.log("hello argv")'],
+        outputIncludes: ['hello argv'],
+      },
+      {
+        id: 'shell-meta-no-shell',
+        argv: ['node', '-e', 'console.log("a; rm -rf b")'],
+        outputIncludes: ['a; rm -rf b'],
+      },
+    ],
+    judgeRubric: {
+      version: 1,
+      scale: { 1: 'bad', 5: 'good' },
+      dimensions: [{ id: 'taskFulfillment', description: 'x' }],
+    },
+  };
+
+  const packet = await buildEvalRunPacket({ runDir, workspace: tempRoot, evalCase, runObjectiveChecks: true });
+  assert.equal(packet.objectiveChecks.length, 2);
+  for (const check of packet.objectiveChecks) {
+    assert.equal(check.ok, true, `${check.id} should pass: ${check.failures.join(', ')}`);
+  }
+});
+
+test('readEvalCase rejects objective checks with absolute or traversing cwd', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-eval-cwd-'));
+  const casePath = path.join(tempRoot, 'absolute-cwd.json');
+  await fs.writeFile(casePath, JSON.stringify({
+    version: 1,
+    id: 'absolute-cwd',
+    category: 'cli',
+    prompt: 'p',
+    objectiveChecks: [{ command: 'echo hi', cwd: '/tmp' }],
+    judgeRubric: { version: 1, scale: { 1: 'bad', 5: 'good' }, dimensions: [{ id: 'taskFulfillment', description: 'x' }] },
+  }));
+  await assert.rejects(
+    () => findEvalCase(casePath),
+    /cwd must be relative to the workspace/,
+  );
+
+  const noCmdPath = path.join(tempRoot, 'no-command.json');
+  await fs.writeFile(noCmdPath, JSON.stringify({
+    version: 1,
+    id: 'no-command',
+    category: 'cli',
+    prompt: 'p',
+    objectiveChecks: [{ id: 'empty' }],
+    judgeRubric: { version: 1, scale: { 1: 'bad', 5: 'good' }, dimensions: [{ id: 'taskFulfillment', description: 'x' }] },
+  }));
+  await assert.rejects(
+    () => findEvalCase(noCmdPath),
+    /must provide either "command" .* or "argv"/,
+  );
+});
+
+test('redactSensitiveText is applied before sending the judge prompt to the model', () => {
+  // The judge prompt is built by buildPairwiseJudgePrompt and then redacted
+  // at the call boundary in eval-matrix.ts and cli.ts before runTask is
+  // invoked. This test mirrors the boundary-level guarantee: any text we send
+  // through redactSensitiveText must scrub structured secrets.
+  const promptish = 'Run packet: api_key=longSecret123 plus token: abc12345xyz';
+  const redacted = redactSensitiveText(promptish);
+  assert.doesNotMatch(redacted, /longSecret123/);
+  assert.doesNotMatch(redacted, /abc12345xyz/);
+  assert.match(redacted, /\[redacted\]/);
+});
