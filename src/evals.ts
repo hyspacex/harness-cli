@@ -861,7 +861,7 @@ function evaluateObjectiveCheckOutput(options: {
   return failures;
 }
 
-function redactSensitiveText(value: string | null | undefined): string | null {
+export function redactSensitiveText(value: string | null | undefined): string | null {
   if (value == null) return null;
   return value
     .replace(/sk-ant-[A-Za-z0-9.*_-]+/g, 'anthropic-key-[redacted]')
@@ -873,7 +873,7 @@ function redactSensitiveText(value: string | null | undefined): string | null {
     .replace(/(?:AKIA|ASIA)[A-Z0-9]{16}/g, 'aws-access-key-[redacted]')
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(
-      /((?:api[_-]?key|token|authorization|password|secret)["' \t:=]+)([^"',\s]+)/gi,
+      /((?:api[_-]?key|token|authorization|password|secret)["' \t]*[:=]\s*["']?)([A-Za-z0-9._\-+/=]{8,})/gi,
       '$1[redacted]',
     );
 }

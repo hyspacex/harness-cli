@@ -10,6 +10,7 @@ import {
   computeEvaluationSpecHash,
   findEvalCase,
   listEvalCases,
+  redactSensitiveText,
 } from '../dist/evals.js';
 
 function makePacket(evalCase, specHash) {
@@ -121,6 +122,28 @@ test('eval packets ignore stale lastError on completed runs', async () => {
   assert.equal(packet.run.status, 'completed');
   assert.equal(packet.run.executionProfile, null);
   assert.equal(packet.run.lastError, null);
+});
+
+test('redactSensitiveText scrubs secrets without mangling prose containing the word token', () => {
+  // Real secret patterns must be redacted.
+  assert.equal(redactSensitiveText('api_key=longSecret123'), 'api_key=[redacted]');
+  assert.equal(redactSensitiveText('token: abc12345xyz'), 'token: [redacted]');
+  assert.equal(redactSensitiveText('"password": "myverylongsecret"'), '"password": "[redacted]"');
+  assert.equal(redactSensitiveText('Authorization=longtoken12345'), 'Authorization=[redacted]');
+  assert.equal(redactSensitiveText('Authorization: Bearer abc.def_ghi'), 'Authorization: Bearer [redacted]');
+  assert.equal(redactSensitiveText('use sk-ant-aaa.bbb'), 'use anthropic-key-[redacted]');
+  assert.equal(redactSensitiveText('export GH=ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 'export GH=github-token-[redacted]');
+  assert.equal(redactSensitiveText('AKIAABCDEFGHIJKLMNOP rest'), 'aws-access-key-[redacted] rest');
+  assert.equal(redactSensitiveText('xoxb-1234567890-abcdef'), 'slack-token-[redacted]');
+  assert.equal(redactSensitiveText('glpat-aaaaaaaaaaaaaaaaaaaa'), 'gitlab-token-[redacted]');
+
+  // Prose mentioning the trigger words must NOT be mangled.
+  const prose = 'the message names the bad token as points to help. The first non-`--` token as the command. password protected. an authorization step is required.';
+  assert.equal(redactSensitiveText(prose), prose);
+
+  // Short non-secret values after key=foo must NOT be redacted (under 8 chars).
+  assert.equal(redactSensitiveText('token: a'), 'token: a');
+  assert.equal(redactSensitiveText('password=short'), 'password=short');
 });
 
 test('objective checks can expect non-zero exits and required output', async () => {

@@ -16,3 +16,4 @@
 - Fixed `--max-sprints`, `--max-repair-rounds`, and `--max-negotiation-rounds` to reject non-numeric, fractional, zero, and negative values instead of silently coercing them.
 - Fixed unknown top-level commands so `harness <unknown>` exits non-zero with a clear error instead of falling through to help.
 - Fixed packet redaction to also scrub GitHub, GitLab, Slack, and AWS access-key tokens before artifacts are written or embedded in judge prompts.
+- Fixed the catchall redaction pattern so prose containing the words `token`, `password`, `authorization`, or `secret` is no longer mangled when followed by an unrelated word (e.g. "the bad token as points to help"). The pattern now requires a `:` or `=` separator and a structured value of 8+ chars.
