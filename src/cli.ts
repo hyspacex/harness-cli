@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from 'node:path';
+import { buildOverrides, flagEnabled, parseProviderName } from './cli-flags.js';
 import { loadConfig, writeDefaultConfig } from './config.js';
 import {
   buildDryJudgeResult,
@@ -9,13 +10,16 @@ import {
   listEvalCases,
   normalizeJudgeResult,
   parseJudgeJson,
+  redactSensitiveText,
   writeEvalRunPacket,
   writeJudgeComparisonArtifacts,
 } from './evals.js';
+import { runEvalMatrix } from './eval-matrix.js';
 import { HarnessRunner } from './harness.js';
+import { listExecutionProfiles } from './profiles.js';
 import { createProvider } from './providers/index.js';
 import { listDirectories, readJson, slugify } from './utils.js';
-import type { HarnessConfig, ProviderName, RunState } from './types.js';
+import type { ProviderName, RunState } from './types.js';
 
 async function main(): Promise<void> {
   const { command, positionals, flags } = parseArgv(process.argv.slice(2));
@@ -51,14 +55,20 @@ async function main(): Promise<void> {
       await printStatus(flags, positionals[0] || null);
       return;
     }
+    case 'profiles': {
+      await printProfiles(flags);
+      return;
+    }
     case 'eval': {
       await handleEvalCommand(flags, positionals);
       return;
     }
     case 'help':
     case undefined:
-    default:
       printHelp();
+      return;
+    default:
+      throw new Error(`Unknown command: ${command}. Run "harness help" to see available commands.`);
   }
 }
 
@@ -105,9 +115,28 @@ async function handleEvalCommand(flags: Record<string, string>, positionals: str
       await compareEvalRuns(flags, positionals);
       return;
     }
+    case 'matrix': {
+      await runEvalMatrix(flags, positionals);
+      return;
+    }
     case 'help':
     default:
       printEvalHelp();
+  }
+}
+
+async function printProfiles(flags: Record<string, string>): Promise<void> {
+  const { config } = await loadConfig(flags.config, buildOverrides(flags));
+  const profiles = listExecutionProfiles(config.profiles);
+
+  for (const profile of profiles) {
+    console.log(`${profile.name}`);
+    console.log(`  tags: ${profile.tags.join(', ') || '(none)'}`);
+    console.log(`  description: ${profile.description}`);
+    if (profile.useWhen.length > 0) {
+      console.log(`  use when: ${profile.useWhen.join(' ')}`);
+    }
+    console.log('');
   }
 }
 
@@ -198,7 +227,9 @@ async function runLlmJudge(
   packetB: Awaited<ReturnType<typeof buildEvalRunPacket>>,
 ) {
   const judgeFlags = { ...flags, provider: judgeProvider };
-  const { config } = await loadConfig(flags.config, buildOverrides(judgeFlags));
+  const { config } = await loadConfig(flags.config, buildOverrides(judgeFlags), {
+    profile: flags['judge-profile'] || flags.profile || null,
+  });
   const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
@@ -216,7 +247,7 @@ async function runLlmJudge(
     kind: 'evaluator',
     label: `meta-judge-${caseId}`,
     cwd: process.cwd(),
-    prompt,
+    prompt: redactSensitiveText(prompt) || '',
     artifacts: {},
   });
   const parsed = result.parsed || parseJudgeJson(result.rawText);
@@ -234,7 +265,7 @@ async function runLlmJudge(
 
 async function createRunner(flags: Record<string, string>): Promise<HarnessRunner> {
   const overrides = buildOverrides(flags);
-  const { config } = await loadConfig(flags.config, overrides);
+  const { config } = await loadConfig(flags.config, overrides, { profile: flags.profile || null });
   const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
@@ -258,7 +289,7 @@ async function createRunner(flags: Record<string, string>): Promise<HarnessRunne
 
 async function printStatus(flags: Record<string, string>, runId: string | null): Promise<void> {
   const overrides = buildOverrides(flags);
-  const { config } = await loadConfig(flags.config, overrides);
+  const { config } = await loadConfig(flags.config, overrides, { profile: flags.profile || null });
 
   if (runId) {
     const run = await readJson<RunState | null>(path.join(config.runRoot, 'runs', runId, 'run.json'), null);
@@ -279,7 +310,7 @@ async function printStatus(flags: Record<string, string>, runId: string | null):
     const run = await readJson<RunState | null>(path.join(config.runRoot, 'runs', id, 'run.json'), null);
     if (!run) continue;
     console.log(
-      `${run.id}\n  status: ${run.status}\n  providers: ${run.provider}\n  sprint: ${run.sprint}\n  summary: ${run.summary || '(none yet)'}\n`,
+      `${run.id}\n  status: ${run.status}\n  providers: ${run.provider}\n  profile: ${run.executionProfile || '(none)'}\n  sprint: ${run.sprint}\n  summary: ${run.summary || '(none yet)'}\n`,
     );
   }
 }
@@ -289,6 +320,9 @@ function printRunSummary(run: RunState): void {
   console.log(`Run: ${run.id}`);
   console.log(`Status: ${run.status}`);
   console.log(`Providers: ${run.provider}`);
+  if (run.executionProfile) {
+    console.log(`Profile: ${run.executionProfile}`);
+  }
   console.log(`Workspace: ${run.workspace}`);
   console.log(`Sprint: ${run.sprint}`);
   if (run.currentFeatureId) {
@@ -308,13 +342,15 @@ function printHelp(): void {
 
 Commands:
   harness init [--config harness.config.json]
-  harness run "Build a ..." [--config file] [--provider claude-sdk|codex] [--workspace path]
-  harness resume <runId> [--config file]
-  harness status [runId] [--config file]
-  harness eval <list|packet|compare> [flags]
+  harness profiles [--config file]
+  harness run "Build a ..." [--config file] [--profile name] [--provider claude-sdk|codex] [--workspace path]
+  harness resume <runId> [--config file] [--profile name]
+  harness status [runId] [--config file] [--profile name]
+  harness eval <list|packet|compare|matrix> [flags]
 
 Flags:
   --config <path>       Config file path (default: ./harness.config.json)
+  --profile <name>      Execution profile to apply (run/status) or one matrix profile
   --provider <name>     Override provider from config
   --workspace <path>    Override workspace from config
   --run-root <path>     Override run root from config
@@ -332,36 +368,17 @@ Commands:
   harness eval list [--cases evals/cases]
   harness eval packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
   harness eval compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
+  harness eval matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
+  harness eval matrix report --from <matrixOutDir> [--judge-provider claude-sdk|codex]
 
 Notes:
   compare writes packet-a.json, packet-b.json, judge-prompt.md, and judge-result.json.
   If --judge-provider is omitted, compare runs in dry mode and only prepares the judge prompt.
+  matrix defaults to dry mode and writes matrix-plan.json plus matrix-plan.md.
+  When executed, matrix writes per-profile packets, matrix-result.md, and pairwise comparison prompts/results.
+  matrix report rebuilds packets, matrix-result.md, and comparisons from an existing matrix-plan.json.
   Add --objective-checks true to run case-defined commands while building packets.
 `);
-}
-
-function buildOverrides(flags: Record<string, string>): Partial<HarnessConfig> {
-  const overrides: Partial<HarnessConfig> = {};
-  if (flags.provider) overrides.provider = flags.provider as HarnessConfig['provider'];
-  if (flags.workspace) overrides.workspace = flags.workspace;
-  if (flags['run-root']) overrides.runRoot = flags['run-root'];
-  if (flags.approval) overrides.approvalPolicy = flags.approval as HarnessConfig['approvalPolicy'];
-  if (flags['max-sprints']) overrides.maxSprints = Number(flags['max-sprints']);
-  if (flags['max-repair-rounds']) overrides.maxRepairRounds = Number(flags['max-repair-rounds']);
-  if (flags['max-negotiation-rounds']) overrides.maxNegotiationRounds = Number(flags['max-negotiation-rounds']);
-  return overrides;
-}
-
-function flagEnabled(flags: Record<string, string>, name: string): boolean {
-  const value = flags[name];
-  if (value === undefined) return false;
-  return value !== 'false' && value !== '0' && value !== 'no';
-}
-
-function parseProviderName(value: string | undefined): ProviderName | undefined {
-  if (!value) return undefined;
-  if (value === 'claude-sdk' || value === 'codex') return value;
-  throw new Error(`Unsupported judge provider: ${value}`);
 }
 
 function parseArgv(argv: string[]): {

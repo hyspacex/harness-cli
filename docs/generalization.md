@@ -96,3 +96,9 @@ If this repo needs to become truly profile-driven, the next useful layer would b
 - optional skill packs
 
 But the important part is already done: pass/fail logic is criteria-driven instead of hardcoded to a visual-web rubric.
+
+## Meta-Evals
+
+Harness evals are separate from per-run evaluation criteria. A harness run can generate project-specific rubrics for its own sprint loop, while `evals/cases/*.json` defines a locked meta-eval rubric for comparing two complete harness runs.
+
+Use the meta-eval system when changing harness behavior and you need a before/after signal. The case prompt, objective checks, and `judgeRubric` stay fixed, and generated packets include an `evaluationSpecHash` so changed criteria are easy to detect. See [harness-evals.md](harness-evals.md) and [../evals/README.md](../evals/README.md) for commands and case-authoring guidance.
