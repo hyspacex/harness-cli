@@ -280,20 +280,35 @@ The harness is not locked to web apps. The researcher generates project-specific
 
 Adjust `smoke.*` commands and evaluator tooling to match your project. See [docs/generalization.md](docs/generalization.md) for details.
 
+## Eval workbench
+
+Harness evals let you compare complete runs against fixed cases with locked rubrics, deterministic objective checks, and packetized artifacts. Matrix mode can run the same case across multiple execution profiles, including the adaptive selector that expands to the recommended profile set for the case category.
+
+Useful docs:
+
+- [Adaptive agent workbench](docs/adaptive-workbench.md) explains profiles, adaptive profile selection, and matrix execution.
+- [Harness evals](docs/harness-evals.md) explains eval packets, pairwise judging, objective checks, and matrix reports.
+- [Eval release gates](docs/eval-release-gates.md) defines the current "good enough to ship" checklist.
+
 ## CLI reference
 
 ```
-harness init   [--config path]                     Write default config
-harness run    "prompt" [flags]                     Start a new run
-harness resume <run-id> [--config path]             Resume interrupted run
-harness status [run-id] [--config path]             Inspect runs
+harness init     [--config path]                     Write default config
+harness profiles [--config path]                     List execution profiles
+harness run      "prompt" [flags]                    Start a new run
+harness resume   <run-id> [--config path]            Resume interrupted run
+harness status   [run-id] [--config path]            Inspect runs
+harness eval     <list|packet|compare|matrix>        Build packets and compare runs
 
 Flags:
   --config <path>                Config file (default: ./harness.config.json)
+  --profile <name>               Execution profile for run/status or one matrix profile
   --provider <name>              claude-sdk | codex
   --workspace <path>             Project directory
   --run-root <path>              Artifact storage directory
   --approval <policy>            allow_once | allow_always | reject_once | reject_always
+  --max-sprints <N>              Max features/sprints to run
+  --max-repair-rounds <N>        Max repair rounds per sprint
   --max-negotiation-rounds <N>   Contract negotiation cap (default: 3)
 ```
 

@@ -36,13 +36,21 @@ Matrix planning runs real eval cases through one or more profiles. It defaults t
 npm run harness -- eval matrix --case examples-adaptive-dashboard-filtering --profiles adaptive
 ```
 
-For frontend cases, `adaptive` currently expands to a quick scout pass plus a visual-QA profile. Execute the plan when ready:
+Adaptive selection is category-aware:
+
+- frontend/UI/dashboard cases expand to `fast,visual-qa`
+- CLI/backend/API cases expand to `fast,balanced`
+- uncategorized cases expand to `fast,balanced`
+
+Execute the plan when ready:
 
 ```bash
 npm run harness -- eval matrix --case examples-adaptive-dashboard-filtering --profiles adaptive --execute true
 ```
 
 Execution copies fixture workspaces by default, writes per-profile harness runs under the matrix output directory, emits eval packets, writes `matrix-result.md`, and creates locked-rubric pairwise comparison artifacts for packetized profile runs, including failed runs. Without `--judge-provider`, those comparisons are dry-mode prompts and inconclusive `judge-result.json` files ready for review. Add `--judge-provider claude-sdk` or `--judge-provider codex` to ask a model judge to score the profile pairs.
+
+For release decisions, add `--objective-checks true` and inspect `matrix-result.json.shipGate`. A releasable run should be `pass`, or `warning` only when LLM judging was intentionally omitted and every required objective check passed.
 
 Regenerate packets and reports from an existing matrix directory without rerunning agents:
 

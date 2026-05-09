@@ -64,3 +64,4 @@ npm run harness -- eval matrix \
 
 Use `--judge-provider claude-sdk` or `--judge-provider codex` when the release decision depends on the pairwise winner instead of only mechanical health.
 
+For adaptive profile verification, replace the profile list with `--profiles adaptive`. The matrix will expand the selector based on the case category and record the concrete profile list in `matrix-plan.json`.
