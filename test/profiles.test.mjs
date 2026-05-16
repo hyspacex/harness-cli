@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { loadConfig } from '../dist/config.js';
-import { expandExecutionProfileSelection, listExecutionProfiles } from '../dist/profiles.js';
+import { expandExecutionProfileSelection, listExecutionProfiles, resolveExecutionProfile } from '../dist/profiles.js';
 
 async function writeTempConfig(value) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-profile-config-'));
@@ -62,4 +62,25 @@ test('adaptive profile selection chooses a fast scout and visual QA for frontend
   assert.ok(names.includes('fast'));
   assert.ok(names.includes('visual-qa'));
   assert.deepEqual(selection, ['fast', 'visual-qa']);
+});
+
+test('pi-flat-generator profile selects flat runtime with Pi generator and separate evaluator', async () => {
+  const profile = resolveExecutionProfile('pi-flat-generator');
+
+  assert.equal(profile.config.runtimeMode, 'flat');
+  assert.equal(profile.config.roleProviders?.generator, 'pi');
+  assert.equal(profile.config.roleProviders?.evaluator, 'claude-sdk');
+  assert.equal(profile.config.maxNegotiationRounds, 1);
+
+  const configPath = await writeTempConfig({});
+  const { config } = await loadConfig(configPath, {}, { profile: 'pi-flat-generator' });
+
+  assert.equal(config.executionProfile, 'pi-flat-generator');
+  assert.equal(config.runtimeMode, 'flat');
+  assert.deepEqual(config.roleProviders, {
+    researcher: 'claude-sdk',
+    planner: 'claude-sdk',
+    generator: 'pi',
+    evaluator: 'claude-sdk',
+  });
 });

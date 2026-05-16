@@ -28,6 +28,13 @@ const HYBRID_CODEX_PLAN_AND_BUILD: RoleProviderMap = {
   evaluator: 'claude-sdk',
 };
 
+const HYBRID_PI_GENERATOR: RoleProviderMap = {
+  researcher: 'claude-sdk',
+  planner: 'claude-sdk',
+  generator: 'pi',
+  evaluator: 'claude-sdk',
+};
+
 export const BUILTIN_EXECUTION_PROFILES: ExecutionProfile[] = [
   {
     name: 'full-harness',
@@ -94,6 +101,34 @@ export const BUILTIN_EXECUTION_PROFILES: ExecutionProfile[] = [
         effort: 'high',
         summary: 'concise',
         serviceTier: 'fast',
+      },
+    },
+  },
+  {
+    name: 'pi-generator-spike',
+    description: 'Claude researches and evaluates while Pi owns the generator task through the provider adapter spike.',
+    tags: ['hybrid', 'pi', 'spike'],
+    useWhen: ['You want to test Pi as a generator runtime while preserving existing planning and evaluation artifacts.'],
+    config: {
+      provider: 'claude-sdk',
+      roleProviders: HYBRID_PI_GENERATOR,
+      pi: {
+        outputMode: 'json',
+      },
+    },
+  },
+  {
+    name: 'pi-flat-generator',
+    description: 'Skip separate research/planning roles, bootstrap canonical plan artifacts, and let Pi own contract drafting plus implementation while Claude evaluates.',
+    tags: ['hybrid', 'pi', 'flat-runtime', 'experimental'],
+    useWhen: ['You want to test whether a stronger generator runtime can collapse the research/planning ceremony without losing eval artifact compatibility.'],
+    config: {
+      provider: 'claude-sdk',
+      runtimeMode: 'flat',
+      roleProviders: HYBRID_PI_GENERATOR,
+      maxNegotiationRounds: 1,
+      pi: {
+        outputMode: 'json',
       },
     },
   },

@@ -3,7 +3,8 @@ import path from 'node:path';
 import { exec as execCallback, execFile as execFileCallback } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import type { RunState } from './types.js';
+import type { ArtifactRoleProviderMap, ArtifactRunStatus } from './artifacts/schema.js';
+import { readRunArtifactBundle } from './artifacts/run-reader.js';
 import {
   ensureDir,
   extractJsonObject,
@@ -125,10 +126,10 @@ export interface EvalRunPacket {
   };
   run: {
     id: string;
-    status: RunState['status'];
+    status: ArtifactRunStatus;
     provider: string;
     executionProfile: string | null;
-    roleProviders: RunState['roleProviders'];
+    roleProviders: ArtifactRoleProviderMap;
     workspace: string;
     runDir: string;
     createdAt: string;
@@ -358,14 +359,10 @@ function sortJsonValue(value: unknown): unknown {
 
 export async function buildEvalRunPacket(options: BuildEvalRunPacketOptions): Promise<EvalRunPacket> {
   const runDir = path.resolve(options.runDir);
-  const runStatePath = path.join(runDir, 'run.json');
-  const runState = await readJson<RunState | null>(runStatePath, null);
-  if (!runState) {
-    throw new Error(`Run packet source is missing run.json: ${runDir}`);
-  }
+  const runBundle = await readRunArtifactBundle(runDir);
+  const run = runBundle.run;
 
-  const metrics = await readJson<Record<string, unknown> | null>(path.join(runDir, 'metrics.json'), null);
-  const objectiveWorkspace = resolveObjectiveWorkspace(options.evalCase, options.workspace, runState.workspace);
+  const objectiveWorkspace = resolveObjectiveWorkspace(options.evalCase, options.workspace, run.workspace);
   const objectiveChecks = options.runObjectiveChecks
     ? await runObjectiveChecks(options.evalCase?.objectiveChecks || [], objectiveWorkspace)
     : [];
@@ -389,22 +386,22 @@ export async function buildEvalRunPacket(options: BuildEvalRunPacketOptions): Pr
       evaluationSpecHash: options.evalCase ? computeEvaluationSpecHash(options.evalCase) : null,
     },
     run: {
-      id: runState.id,
-      status: runState.status,
-      provider: runState.provider,
-      executionProfile: runState.executionProfile || null,
-      roleProviders: runState.roleProviders,
-      workspace: runState.workspace,
+      id: run.id,
+      status: run.status,
+      provider: run.provider,
+      executionProfile: run.executionProfile || null,
+      roleProviders: run.roleProviders,
+      workspace: run.workspace,
       runDir,
-      createdAt: runState.createdAt,
-      updatedAt: runState.updatedAt,
-      sprint: runState.sprint,
-      currentFeatureId: runState.currentFeatureId,
-      summary: redactSensitiveText(runState.summary),
-      lastError: runState.status === 'failed' ? redactSensitiveText(runState.lastError) : null,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+      sprint: run.sprint,
+      currentFeatureId: run.currentFeatureId,
+      summary: redactSensitiveText(run.summary),
+      lastError: run.status === 'failed' ? redactSensitiveText(run.lastError) : null,
     },
     objectiveChecks,
-    metrics,
+    metrics: runBundle.metrics,
     artifacts,
   };
 }

@@ -12,6 +12,7 @@ import type {
 import { SYSTEM_PROMPTS } from '../prompts.js';
 import { ClaudeSdkProvider } from './claude-sdk.js';
 import { CodexProvider } from './codex.js';
+import { PiProvider } from './pi.js';
 
 function mergeClaudeSystemPrompt(
   harnessPrompt: string,
@@ -74,6 +75,8 @@ function createRuntime(
         { ...config.codex, harnessApprovalPolicy: config.approvalPolicy },
         hooks,
       );
+    case 'pi':
+      return new PiProvider(config.pi, hooks);
     default:
       throw new Error(`Unsupported provider: ${providerName}`);
   }
@@ -87,7 +90,9 @@ function createTaskCapabilities(
   const hasBrowserQa = role === 'evaluator'
     ? provider === 'claude-sdk'
       ? 'playwright' in (config.claudeSdk.roleOverrides.evaluator?.mcpServers || {})
-      : config.codex.assumePlaywrightMcp
+      : provider === 'codex'
+        ? config.codex.assumePlaywrightMcp
+        : false
     : false;
 
   return {

@@ -47,6 +47,7 @@ import {
   writeJson,
   writeText,
 } from './utils.js';
+import { buildFlatRuntimeArtifacts } from './flat-runtime.js';
 import {
   buildEvaluatorPrompt,
   buildEvaluatorReviewContractPrompt,
@@ -437,8 +438,9 @@ export class HarnessRunner {
 
       await this.ensureSkills();
 
-      const evalCriteria = await this.ensureResearch(runState);
-      const backlog = await this.ensurePlan(runState, evalCriteria);
+      const planningArtifacts = await this.ensurePlanningArtifacts(runState);
+      const evalCriteria = planningArtifacts.evalCriteria;
+      const backlog = planningArtifacts.backlog;
 
       runState.status = 'running';
       await this.saveRunState(runState);
@@ -832,6 +834,16 @@ export class HarnessRunner {
 
   // ---------- Research / plan ----------
 
+  private async ensurePlanningArtifacts(runState: RunState): Promise<{ evalCriteria: EvalCriteria | null; backlog: Backlog }> {
+    if (this.config.runtimeMode === 'flat') {
+      return this.ensureFlatPlan(runState);
+    }
+
+    const evalCriteria = await this.ensureResearch(runState);
+    const backlog = await this.ensurePlan(runState, evalCriteria);
+    return { evalCriteria, backlog };
+  }
+
   private async ensureResearch(runState: RunState): Promise<EvalCriteria | null> {
     const paths = this.runPaths(runState);
     const criteriaExists = await fileExists(paths.evalCriteria);
@@ -906,6 +918,45 @@ export class HarnessRunner {
     const backlog = validateBacklogSprintBudget(validateBacklog(backlogRaw), this.config.maxSprints);
     await writeJson(paths.backlog, backlog);
     return backlog;
+  }
+
+  private async ensureFlatPlan(runState: RunState): Promise<{ evalCriteria: EvalCriteria; backlog: Backlog }> {
+    const paths = this.runPaths(runState);
+    const requiredArtifacts = [
+      paths.researchBrief,
+      paths.evalCriteria,
+      paths.spec,
+      paths.backlog,
+      paths.projectPrinciples,
+    ];
+    const complete = (await Promise.all(requiredArtifacts.map((artifactPath) => fileExists(artifactPath))))
+      .every(Boolean);
+
+    if (!complete) {
+      runState.status = 'planning';
+      await this.saveRunState(runState);
+      const artifacts = buildFlatRuntimeArtifacts({
+        prompt: runState.prompt,
+        maxSprints: this.config.maxSprints,
+      });
+      await Promise.all([
+        writeText(paths.researchBrief, artifacts.researchBrief),
+        writeJson(paths.evalCriteria, artifacts.evalCriteria),
+        writeText(paths.spec, artifacts.spec),
+        writeJson(paths.backlog, artifacts.backlog),
+        writeText(paths.projectPrinciples, artifacts.projectPrinciples),
+      ]);
+      await this.freezeBenchmarkArtifacts(runState, 'flat-plan', requiredArtifacts);
+    }
+
+    const evalCriteria = await readJson<EvalCriteria>(paths.evalCriteria, buildFlatRuntimeArtifacts({
+      prompt: runState.prompt,
+      maxSprints: this.config.maxSprints,
+    }).evalCriteria);
+    const backlogRaw = await readJson<Backlog | null>(paths.backlog, null);
+    const backlog = validateBacklogSprintBudget(validateBacklog(backlogRaw), this.config.maxSprints);
+    await writeJson(paths.backlog, backlog);
+    return { evalCriteria, backlog };
   }
 
   // ---------- Contract negotiation ----------

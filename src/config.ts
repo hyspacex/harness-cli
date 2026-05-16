@@ -32,6 +32,7 @@ function normalizeFinalConfig(config: HarnessConfig): HarnessConfig {
 export const DEFAULT_CONFIG: HarnessConfig = {
   provider: 'claude-sdk',
   executionProfile: null,
+  runtimeMode: 'full',
   roleProviders: buildUniformRoleProviders('claude-sdk'),
   workspace: '.',
   runRoot: '.harness',
@@ -102,6 +103,23 @@ export const DEFAULT_CONFIG: HarnessConfig = {
       evaluator: {},
     },
   },
+  pi: {
+    command: 'pi',
+    args: [],
+    env: {},
+    provider: null,
+    model: null,
+    outputMode: 'json',
+    noSession: false,
+    sessionDir: null,
+    timeoutMs: 600000,
+    roleOverrides: {
+      researcher: {},
+      planner: {},
+      generator: {},
+      evaluator: {},
+    },
+  },
 };
 
 export async function loadConfig(
@@ -131,6 +149,9 @@ export async function loadConfig(
   finalConfig.codex.writableRoots = (finalConfig.codex.writableRoots || []).map((root) =>
     toAbsolutePath(finalConfig.workspace, root),
   );
+  if (finalConfig.pi.sessionDir) {
+    finalConfig.pi.sessionDir = toAbsolutePath(finalConfig.workspace, finalConfig.pi.sessionDir);
+  }
   return { config: finalConfig, configPath: absoluteConfigPath };
 }
 
