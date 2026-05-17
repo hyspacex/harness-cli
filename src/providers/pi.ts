@@ -44,12 +44,19 @@ class CliPiTransport implements PiTransport {
       });
       return { stdout, stderr };
     } catch (error) {
-      const execError = error as Error & { stdout?: string; stderr?: string; code?: number };
+      const execError = error as Error & { stdout?: string; stderr?: string; code?: number; signal?: string; killed?: boolean };
       const stdout = execError.stdout || '';
-      const stderr = execError.stderr || execError.message || '';
+      const stderr = execError.stderr || '';
+      const details = [
+        `command: ${formatCommandForLog(request.command, redactPromptArgs(request.args))}`,
+        `stdoutBytes: ${Buffer.byteLength(stdout, 'utf8')}`,
+        `stderrBytes: ${Buffer.byteLength(stderr, 'utf8')}`,
+        ...(execError.signal ? [`signal: ${execError.signal}`] : []),
+        ...(execError.killed ? ['killed: true'] : []),
+      ];
       throw new Error(
         `Pi provider exited with ${typeof execError.code === 'number' ? `code ${execError.code}` : 'an error'}:` +
-          `\n${[stderr, stdout].filter(Boolean).join('\n')}`,
+          `\n${details.join('\n')}`,
       );
     }
   }
@@ -178,6 +185,17 @@ function redactPromptArgs(args: string[]): string[] {
   }
 
   return redacted;
+}
+
+function formatCommandForLog(command: string, args: string[]): string {
+  return [command, ...args].map(formatArgForLog).join(' ');
+}
+
+function formatArgForLog(value: string): string {
+  if (/^[A-Za-z0-9_./:=@-]+$/.test(value)) {
+    return value;
+  }
+  return JSON.stringify(value);
 }
 
 function parsePiOutput(stdout: string): { text: string; meta: Record<string, unknown> } {

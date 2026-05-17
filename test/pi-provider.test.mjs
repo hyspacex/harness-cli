@@ -139,6 +139,36 @@ test('PiProvider spike rejects non-generator roles explicitly', async () => {
   );
 });
 
+test('PiProvider redacts prompt-bearing args from CLI transport errors', async () => {
+  const prompt = 'Sensitive repo context: SECRET_PROMPT_SHOULD_NOT_LEAK';
+  const provider = new PiProvider({
+    command: process.execPath,
+    args: ['-e', 'setTimeout(() => {}, 1000)'],
+    env: {},
+    provider: null,
+    model: null,
+    outputMode: 'json',
+    noSession: false,
+    sessionDir: null,
+    timeoutMs: 10,
+    roleOverrides: {},
+  });
+
+  await assert.rejects(
+    () => provider.runTask(generatorTask({ prompt })),
+    (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      assert.match(message, /Pi provider exited with/);
+      assert.match(message, /-p "\[redacted prompt\]"/);
+      assert.match(message, /stdoutBytes:/);
+      assert.match(message, /stderrBytes:/);
+      assert.doesNotMatch(message, /SECRET_PROMPT_SHOULD_NOT_LEAK/);
+      assert.doesNotMatch(message, /Sensitive repo context/);
+      return true;
+    },
+  );
+});
+
 test('pi-generator-spike profile routes only generator through pi', () => {
   const profile = resolveExecutionProfile('pi-generator-spike');
 
