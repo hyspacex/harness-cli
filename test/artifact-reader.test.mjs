@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { findLatestRunArtifactBundle } from '../dist/artifacts/run-reader.js';
+import { findLatestRunArtifactBundle } from '../dist/core/artifacts/run-reader.js';
 
 function runState(id, runDir, updatedAt) {
   return {

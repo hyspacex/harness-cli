@@ -1,8 +1,10 @@
-import type { HarnessConfig, ProviderName } from './types.js';
+import { parseRuntimeMode } from './core/ceremony.js';
+import type { HarnessConfig, ProviderName } from './core/types.js';
 
 export function buildOverrides(flags: Record<string, string>): Partial<HarnessConfig> {
   const overrides: Partial<HarnessConfig> = {};
   if (flags.provider) overrides.provider = flags.provider as HarnessConfig['provider'];
+  if (flags['runtime-mode']) overrides.runtimeMode = parseRuntimeMode(flags['runtime-mode']);
   if (flags.workspace) overrides.workspace = flags.workspace;
   if (flags['run-root']) overrides.runRoot = flags['run-root'];
   if (flags.approval) overrides.approvalPolicy = flags.approval as HarnessConfig['approvalPolicy'];
@@ -29,5 +31,8 @@ export function flagEnabled(flags: Record<string, string>, name: string): boolea
 export function parseProviderName(value: string | undefined): ProviderName | undefined {
   if (!value) return undefined;
   if (value === 'claude-sdk' || value === 'codex') return value;
+  if (value === 'pi') {
+    throw new Error('pi is not supported as a --judge-provider; use claude-sdk or codex.');
+  }
   throw new Error(`Unsupported judge provider: ${value}`);
 }

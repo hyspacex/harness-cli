@@ -1,25 +1,28 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { buildOverrides, flagEnabled, parseProviderName } from './cli-flags.js';
-import { loadConfig, writeDefaultConfig } from './config.js';
+import { loadConfig, writeDefaultConfig } from './core/config.js';
+import { findEvalCase, listEvalCases } from './lab/cases.js';
 import {
-  buildDryJudgeResult,
   buildEvalRunPacket,
-  buildPairwiseJudgePrompt,
-  findEvalCase,
-  listEvalCases,
-  normalizeJudgeResult,
-  parseJudgeJson,
   redactSensitiveText,
   writeEvalRunPacket,
+} from './lab/packet.js';
+import {
+  buildDryJudgeResult,
+  buildPairwiseJudgePrompt,
+  normalizeJudgeResult,
+  parseJudgeJson,
   writeJudgeComparisonArtifacts,
-} from './evals.js';
-import { runEvalMatrix } from './eval-matrix.js';
-import { HarnessRunner } from './harness.js';
-import { listExecutionProfiles } from './profiles.js';
-import { createProvider } from './providers/index.js';
-import { listDirectories, readJson, slugify } from './utils.js';
-import type { ProviderName, RunState } from './types.js';
+} from './lab/judge.js';
+import { buildCeremonyRoiReport, renderCeremonyRoiMarkdown } from './core/ceremony-roi.js';
+import { runEvalMatrix } from './lab/eval-matrix.js';
+import { HarnessRunner } from './core/harness.js';
+import { loadRunHistory, recommendProfilesWithEvidence } from './core/history.js';
+import { listExecutionProfiles } from './core/profiles.js';
+import { createProvider } from './core/providers/index.js';
+import { ensureDir, listDirectories, nowIso, readJson, slugify, writeJson, writeText } from './core/utils.js';
+import type { HarnessConfig, ProviderName, RunState } from './core/types.js';
 
 async function main(): Promise<void> {
   const { command, positionals, flags } = parseArgv(process.argv.slice(2));
@@ -36,7 +39,7 @@ async function main(): Promise<void> {
       if (!prompt) {
         throw new Error('Provide a prompt. Example: harness run "Build a small CRM dashboard"');
       }
-      const runner = await createRunner(flags);
+      const runner = await createRunner(flags, prompt);
       const result = await runner.runNew(prompt);
       printRunSummary(result);
       return;
@@ -63,6 +66,10 @@ async function main(): Promise<void> {
       await handleEvalCommand(flags, positionals);
       return;
     }
+    case 'lab': {
+      await handleLabCommand(flags, positionals);
+      return;
+    }
     case 'help':
     case undefined:
       printHelp();
@@ -72,14 +79,47 @@ async function main(): Promise<void> {
   }
 }
 
+const LAB_SUBCOMMANDS = new Set(['list', 'packet', 'compare', 'matrix']);
+
+async function handleLabCommand(flags: Record<string, string>, positionals: string[]): Promise<void> {
+  const subcommand = positionals[0] || 'help';
+  if (LAB_SUBCOMMANDS.has(subcommand)) {
+    await dispatchLabSubcommand(subcommand, flags, positionals);
+    return;
+  }
+  printLabHelp();
+}
+
 async function handleEvalCommand(flags: Record<string, string>, positionals: string[]): Promise<void> {
   const subcommand = positionals[0] || 'help';
 
+  if (LAB_SUBCOMMANDS.has(subcommand)) {
+    console.error(`harness eval ${subcommand} is deprecated; use harness lab ${subcommand}`);
+    await dispatchLabSubcommand(subcommand, flags, positionals);
+    return;
+  }
+
+  switch (subcommand) {
+    case 'roi': {
+      await writeCeremonyRoiReport(flags);
+      return;
+    }
+    case 'help':
+    default:
+      printEvalHelp();
+  }
+}
+
+async function dispatchLabSubcommand(
+  subcommand: string,
+  flags: Record<string, string>,
+  positionals: string[],
+): Promise<void> {
   switch (subcommand) {
     case 'list': {
-      const cases = await listEvalCases(flags.cases || 'evals/cases');
+      const cases = await listEvalCases(flags.cases || null);
       if (cases.length === 0) {
-        console.log(`No eval cases found under ${flags.cases || 'evals/cases'}`);
+        console.log(`No eval cases found under ${flags.cases || 'lab/cases or evals/cases'}`);
         return;
       }
       for (const evalCase of cases) {
@@ -90,10 +130,10 @@ async function handleEvalCommand(flags: Record<string, string>, positionals: str
     case 'packet': {
       const runDir = positionals[1];
       if (!runDir) {
-        throw new Error('Provide a run directory. Example: harness eval packet .harness/runs/<run-id> --case my-case');
+        throw new Error('Provide a run directory. Example: harness lab packet .harness/runs/<run-id> --case my-case');
       }
 
-      const evalCase = flags.case ? await findEvalCase(flags.case, flags.cases || 'evals/cases') : null;
+      const evalCase = flags.case ? await findEvalCase(flags.case, flags.cases || null) : null;
       const packet = await buildEvalRunPacket({
         runDir,
         evalCase,
@@ -119,15 +159,67 @@ async function handleEvalCommand(flags: Record<string, string>, positionals: str
       await runEvalMatrix(flags, positionals);
       return;
     }
-    case 'help':
     default:
-      printEvalHelp();
+      throw new Error(`Unknown lab subcommand: ${subcommand}`);
   }
+}
+
+async function writeCeremonyRoiReport(flags: Record<string, string>): Promise<void> {
+  const { config } = await loadConfig(flags.config, buildOverrides(flags));
+  const entries = await loadRunHistory(config.runRoot, config.profiles);
+  const report = buildCeremonyRoiReport(entries, {
+    runRoot: config.runRoot,
+    builtAt: nowIso(),
+  });
+
+  const outDir = path.resolve(flags.out || path.join(config.runRoot, 'reports'));
+  await ensureDir(outDir);
+  const jsonPath = path.join(outDir, 'ceremony-roi.json');
+  const markdownPath = path.join(outDir, 'ceremony-roi.md');
+  await writeJson(jsonPath, report);
+  await writeText(markdownPath, renderCeremonyRoiMarkdown(report));
+
+  console.log(`Ceremony ROI report (${report.totalRuns} run(s) analyzed):`);
+  for (const finding of report.findings) {
+    console.log(`- ${finding}`);
+  }
+  console.log('');
+  console.log(`Wrote ${jsonPath}`);
+  console.log(`Wrote ${markdownPath}`);
 }
 
 async function printProfiles(flags: Record<string, string>): Promise<void> {
   const { config } = await loadConfig(flags.config, buildOverrides(flags));
   const profiles = listExecutionProfiles(config.profiles);
+
+  if (flags.recommend) {
+    const recommendation = await recommendProfilesWithEvidence({
+      runRoot: config.runRoot,
+      category: flags.category || null,
+      prompt: flags.recommend === 'true' ? null : flags.recommend,
+      customProfiles: config.profiles,
+    });
+    console.log(`Recommended profiles: ${recommendation.profiles.join(', ')}`);
+    console.log(`Category: ${recommendation.category}`);
+    if (recommendation.source === 'evidence') {
+      console.log(`Source: run-history evidence (${recommendation.scope === 'category' ? 'matching category' : 'all runs'})`);
+      for (const item of recommendation.evidence) {
+        const firstRound = item.firstRoundPassRate === null
+          ? 'n/a'
+          : `${Math.round(item.firstRoundPassRate * 100)}%`;
+        console.log(
+          `  ${item.profile}: ${item.runs} run(s), ` +
+            `${Math.round(item.completionRate * 100)}% completed, ` +
+            `${item.avgTasksStarted.toFixed(1)} avg tasks/run, ` +
+            `first-round pass ${firstRound}`,
+        );
+      }
+    } else {
+      console.log('Source: keyword heuristic (no comparable run history under this run root yet)');
+    }
+    console.log('');
+    return;
+  }
 
   for (const profile of profiles) {
     console.log(`${profile.name}`);
@@ -149,10 +241,10 @@ async function compareEvalRuns(flags: Record<string, string>, positionals: strin
     throw new Error('Provide an eval case with --case <id|path>.');
   }
   if (!runA || !runB) {
-    throw new Error('Provide both runs: harness eval compare --case <id> --a <runDir> --b <runDir>');
+    throw new Error('Provide both runs: harness lab compare --case <id> --a <runDir> --b <runDir>');
   }
 
-  const evalCase = await findEvalCase(caseRef, flags.cases || 'evals/cases');
+  const evalCase = await findEvalCase(caseRef, flags.cases || null);
   const packetA = await buildEvalRunPacket({
     runDir: runA,
     evalCase,
@@ -165,7 +257,9 @@ async function compareEvalRuns(flags: Record<string, string>, positionals: strin
     workspace: flags.workspace || null,
     runObjectiveChecks: flagEnabled(flags, 'objective-checks'),
   });
-  const prompt = buildPairwiseJudgePrompt(evalCase, packetA, packetB);
+  const prompt = buildPairwiseJudgePrompt(evalCase, packetA, packetB, {
+    blind: flagEnabled(flags, 'blind-judge'),
+  });
 
   const outDir = path.resolve(
     flags.out ||
@@ -230,6 +324,13 @@ async function runLlmJudge(
   const { config } = await loadConfig(flags.config, buildOverrides(judgeFlags), {
     profile: flags['judge-profile'] || flags.profile || null,
   });
+  if (flags['judge-model']) {
+    if (judgeProvider === 'codex') {
+      config.codex.model = flags['judge-model'];
+    } else {
+      config.claudeSdk.model = flags['judge-model'];
+    }
+  }
   const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
@@ -263,9 +364,43 @@ async function runLlmJudge(
   };
 }
 
-async function createRunner(flags: Record<string, string>): Promise<HarnessRunner> {
+/**
+ * `--profile adaptive` on `harness run` resolves to a concrete profile via
+ * run-history evidence (cheapest within tolerance of the best), falling back
+ * to the keyword heuristic until enough history exists.
+ */
+async function resolveRunProfile(
+  flags: Record<string, string>,
+  overrides: Partial<HarnessConfig>,
+  prompt?: string,
+): Promise<string | null> {
+  if (flags.profile !== 'adaptive') {
+    return flags.profile || null;
+  }
+  if (!prompt) {
+    throw new Error('--profile adaptive needs a prompt; use a concrete profile name for resume/status.');
+  }
+
+  const { config } = await loadConfig(flags.config, overrides);
+  const recommendation = await recommendProfilesWithEvidence({
+    runRoot: config.runRoot,
+    category: flags.category || null,
+    prompt,
+    customProfiles: config.profiles,
+  });
+  const chosen = recommendation.profiles[0];
+  console.log(
+    `Adaptive profile: ${chosen} (${recommendation.source === 'evidence'
+      ? `run-history evidence, ${recommendation.scope === 'category' ? `${recommendation.category} runs` : 'all runs'}`
+      : 'keyword heuristic — no comparable run history yet'})`,
+  );
+  return chosen;
+}
+
+async function createRunner(flags: Record<string, string>, prompt?: string): Promise<HarnessRunner> {
   const overrides = buildOverrides(flags);
-  const { config } = await loadConfig(flags.config, overrides, { profile: flags.profile || null });
+  const profile = await resolveRunProfile(flags, overrides, prompt);
+  const { config } = await loadConfig(flags.config, overrides, { profile });
   const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
@@ -342,42 +477,74 @@ function printHelp(): void {
 
 Commands:
   harness init [--config harness.config.json]
-  harness profiles [--config file]
-  harness run "Build a ..." [--config file] [--profile name] [--provider claude-sdk|codex] [--workspace path]
+  harness profiles [--config file] [--recommend "prompt" [--category name]]
+  harness run "Build a ..." [--config file] [--profile name|adaptive] [--provider claude-sdk|codex] [--workspace path]
   harness resume <runId> [--config file] [--profile name]
   harness status [runId] [--config file] [--profile name]
-  harness eval <list|packet|compare|matrix> [flags]
+  harness lab <list|packet|compare|matrix> [flags]   Model/provider characterization instrument
+  harness eval <roi> [flags]                         Product self-measurement (old eval subcommands moved to lab)
 
 Flags:
   --config <path>       Config file path (default: ./harness.config.json)
   --profile <name>      Execution profile to apply (run/status) or one matrix profile
   --provider <name>     Override provider from config
+  --runtime-mode <mode> Ceremony ladder rung: full | flat | minimal
   --workspace <path>    Override workspace from config
   --run-root <path>     Override run root from config
   --approval <policy>   allow_once | allow_always | reject_once | reject_always
   --max-sprints <N>     Max features/sprints to run
   --max-repair-rounds <N>  Max repair rounds per sprint
   --max-negotiation-rounds <N>  Max contract negotiation rounds (default: 3)
+
+Ceremony ladder:
+  full     separate researcher + planner, negotiated contracts
+  flat     bootstrapped plan artifacts, generator-drafted contract, one review
+  minimal  bootstrapped plan artifacts, harness-authored contract, zero negotiation
+  Verification gates (verdicts, frozen evidence, smoke, final regression) run at every rung.
+  "harness profiles --recommend" picks the cheapest rung the run history supports.
 `);
 }
 
 function printEvalHelp(): void {
   console.log(`harness eval
 
+Product self-measurement of the harness itself.
+
 Commands:
-  harness eval list [--cases evals/cases]
-  harness eval packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
-  harness eval compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
-  harness eval matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
-  harness eval matrix report --from <matrixOutDir> [--judge-provider claude-sdk|codex]
+  harness eval roi [--run-root path] [--out dir]
 
 Notes:
+  roi aggregates run history into a ceremony ROI report: per provider, does role/negotiation ceremony pay for itself?
+  The old eval subcommands (list, packet, compare, matrix) moved to "harness lab" and remain as deprecated aliases here.
+`);
+}
+
+function printLabHelp(): void {
+  console.log(`harness lab
+
+The lab is the model/provider characterization instrument: fixed eval cases,
+locked judge rubrics, and benchmark suites for measuring how much harness
+ceremony each model actually needs.
+
+Commands:
+  harness lab list [--cases dir]
+  harness lab packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
+  harness lab compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
+  harness lab matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
+  harness lab matrix --suite [lab/suites/ceremony-ladder-v1.json] [--out dir] [--execute true]
+  harness lab matrix report --from <matrixOutDir> [--judge-provider claude-sdk|codex]
+
+Notes:
+  list scans lab/cases/ and evals/cases/ by default (lab/cases wins on id collision); --cases scans one dir only.
   compare writes packet-a.json, packet-b.json, judge-prompt.md, and judge-result.json.
   If --judge-provider is omitted, compare runs in dry mode and only prepares the judge prompt.
   matrix defaults to dry mode and writes matrix-plan.json plus matrix-plan.md.
   When executed, matrix writes per-profile packets, matrix-result.md, and pairwise comparison prompts/results.
   matrix report rebuilds packets, matrix-result.md, and comparisons from an existing matrix-plan.json.
+  matrix --suite runs the fixed benchmark grid (cases x ceremony-ladder profiles) and freezes results under lab/results/frozen/.
   Add --objective-checks true to run case-defined commands while building packets.
+  Add --blind-judge true to redact profile/provider/model identifiers from judge prompts.
+  Add --judge-model <model> to override the judge's model (e.g. a non-participant model for fairness).
 `);
 }
 

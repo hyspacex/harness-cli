@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "id": "bench-hard-ledger-undo",
+  "title": "Hard: event-sourced ledger — root-cause two bugs, add compensating undo",
+  "category": "backend",
+  "prompt": "You are working in an existing event-sourced inventory ledger (see README.md): state is derived only by replaying an append-only JSONL event log, and the log must never be rewritten, reordered, or truncated. Users report two long-standing bugs you must root-cause and fix with regression tests: (1) ledgers that grow past a handful of events sometimes produce wrong totals after replay; (2) removed items sometimes reappear with wrong quantities. The repository's golden-v1.jsonl is a real affected production ledger: after your fixes, replaying it must produce exactly expected-state-v1.json, without modifying the file. Required semantics: during replay of historical logs an adjust event for a missing item is skipped as a no-op, but the adjust CLI command must refuse (stderr + non-zero exit) to append an adjustment for an item that does not exist in current state. Then add an `undo` command: it reverts the most recent state-changing command by appending compensating or marker event(s) — never by rewriting the log; `history` must still show all original events; `undo` with nothing to undo errors with non-zero exit. Decide the semantics of consecutive undos yourself, document your choice in README-UNDO.md, and cover it with tests. Do not change the state JSON output shape, the existing commands' interfaces, or the v1 log format's replayability. No npm dependencies; keep all existing tests green.",
+  "workspaceFixture": "lab/fixtures/eventlog",
+  "harnessConfig": {
+    "maxSprints": 3,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "test": "npm test"
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "tests",
+      "argv": ["npm", "test"],
+      "cwd": ".",
+      "timeoutMs": 180000
+    },
+    {
+      "id": "probe-golden-replay",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {execFileSync} from 'node:child_process';\nimport fs from 'node:fs';\nimport os from 'node:os';\nimport path from 'node:path';\nconst dir = fs.mkdtempSync(path.join(os.tmpdir(), 'golden-'));\nconst file = path.join(dir, 'ledger.jsonl');\nfs.copyFileSync('golden-v1.jsonl', file);\nconst before = fs.readFileSync(file, 'utf8');\nconst out = execFileSync('node', ['bin/ledger.mjs', 'state'], {env: {...process.env, LEDGER_FILE: file}, encoding: 'utf8'});\nconst state = JSON.parse(out);\nconst expected = JSON.parse(fs.readFileSync('expected-state-v1.json', 'utf8'));\nconst norm = (o) => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));\nif (norm(state) !== norm(expected)) { console.error('v1 golden replay produced wrong state:', out); process.exit(1); }\nif (fs.readFileSync(file, 'utf8') !== before) { console.error('replay modified the ledger file'); process.exit(1); }\nconsole.log('GOLDEN_OK');"
+      ],
+      "cwd": ".",
+      "timeoutMs": 60000,
+      "outputIncludes": ["GOLDEN_OK"]
+    },
+    {
+      "id": "probe-removed-stays-removed",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {execFileSync, spawnSync} from 'node:child_process';\nimport fs from 'node:fs';\nimport os from 'node:os';\nimport path from 'node:path';\nconst dir = fs.mkdtempSync(path.join(os.tmpdir(), 'removed-'));\nconst file = path.join(dir, 'ledger.jsonl');\nconst env = {...process.env, LEDGER_FILE: file};\nexecFileSync('node', ['bin/ledger.mjs', 'add', 'x', '5'], {env});\nexecFileSync('node', ['bin/ledger.mjs', 'remove', 'x'], {env});\nconst refusal = spawnSync('node', ['bin/ledger.mjs', 'adjust', 'x', '2'], {env, encoding: 'utf8'});\nif (refusal.status === 0) { console.error('adjust on a removed item must exit non-zero'); process.exit(1); }\nif (!String(refusal.stderr || '').trim()) { console.error('adjust refusal must print to stderr'); process.exit(1); }\nfs.appendFileSync(file, JSON.stringify({seq: '3', ts: '2026-03-08T00:00:00.000Z', type: 'adjust', name: 'ghost', delta: 3}) + '\\n');\nconst state = JSON.parse(execFileSync('node', ['bin/ledger.mjs', 'state'], {env, encoding: 'utf8'}));\nif (state.x !== undefined) { console.error('removed item x reappeared:', JSON.stringify(state)); process.exit(1); }\nif (state.ghost !== undefined) { console.error('historical adjust-on-missing must replay as no-op:', JSON.stringify(state)); process.exit(1); }\nconsole.log('REMOVED_OK');"
+      ],
+      "cwd": ".",
+      "timeoutMs": 60000,
+      "outputIncludes": ["REMOVED_OK"]
+    },
+    {
+      "id": "probe-undo-append-only",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {execFileSync, spawnSync} from 'node:child_process';\nimport fs from 'node:fs';\nimport os from 'node:os';\nimport path from 'node:path';\nconst dir = fs.mkdtempSync(path.join(os.tmpdir(), 'undo-'));\nconst file = path.join(dir, 'ledger.jsonl');\nconst env = {...process.env, LEDGER_FILE: file};\nexecFileSync('node', ['bin/ledger.mjs', 'add', 'a', '5'], {env});\nexecFileSync('node', ['bin/ledger.mjs', 'adjust', 'a', '3'], {env});\nlet state = JSON.parse(execFileSync('node', ['bin/ledger.mjs', 'state'], {env, encoding: 'utf8'}));\nif (state.a?.qty !== 8) { console.error('setup failed, expected a.qty=8, got', JSON.stringify(state)); process.exit(1); }\nconst before = fs.readFileSync(file, 'utf8');\nexecFileSync('node', ['bin/ledger.mjs', 'undo'], {env});\nconst after = fs.readFileSync(file, 'utf8');\nif (!after.startsWith(before)) { console.error('undo rewrote or truncated the log'); process.exit(1); }\nif (after.length <= before.length) { console.error('undo must append to the log'); process.exit(1); }\nstate = JSON.parse(execFileSync('node', ['bin/ledger.mjs', 'state'], {env, encoding: 'utf8'}));\nif (state.a?.qty !== 5) { console.error('undo did not revert the adjust, state:', JSON.stringify(state)); process.exit(1); }\nconst history = execFileSync('node', ['bin/ledger.mjs', 'history'], {env, encoding: 'utf8'});\nif (!/adjust/.test(history) || history.split('\\n').filter(Boolean).length < 3) { console.error('history must keep showing original events plus the undo'); process.exit(1); }\nconst empty = spawnSync('node', ['bin/ledger.mjs', 'undo'], {env: {...process.env, LEDGER_FILE: path.join(dir, 'empty.jsonl')}, encoding: 'utf8'});\nif (empty.status === 0) { console.error('undo with nothing to undo must exit non-zero'); process.exit(1); }\nconsole.log('UNDO_OK');"
+      ],
+      "cwd": ".",
+      "timeoutMs": 60000,
+      "outputIncludes": ["UNDO_OK"]
+    }
+  ],
+  "judgeFocus": [
+    "precision of root-cause analysis for both seeded bugs (not just symptom patches)",
+    "undo implemented as appended compensating/marker events with history preserved",
+    "v1 compatibility and append-only invariant respected",
+    "coherence and test coverage of the chosen consecutive-undo semantics",
+    "depth and reproducibility of verification evidence"
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "Replaying golden-v1.jsonl must produce exactly expected-state-v1.json without modifying the file.",
+      "Removed items must stay removed; the adjust command must refuse missing items while historical adjust-on-missing events replay as no-ops.",
+      "undo must revert the most recent state-changing command by appending to the log — the prior log content must remain a byte-for-byte prefix.",
+      "All probe-* objective checks must pass; existing tests and the state output shape must be preserved.",
+      "No npm dependencies may be added."
+    ],
+    "dimensions": [
+      {
+        "id": "rootCauseAnalysis",
+        "weight": "critical",
+        "description": "Whether both seeded defects were located, correctly explained (the actual mechanism, not the symptom), fixed at the root, and pinned with regression tests."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether replay, CLI behavior, undo, and edge cases are actually correct with passing tests and no introduced regressions."
+      },
+      {
+        "id": "integrationCompatibility",
+        "weight": "critical",
+        "description": "Whether the append-only invariant, v1 log compatibility, existing interfaces, and state output shape are fully preserved while integrating the new behavior."
+      },
+      {
+        "id": "verificationDepth",
+        "weight": "high",
+        "description": "Whether the run proves its claims: regression tests for both bugs, undo semantics coverage, golden-file verification, and reproducible command evidence."
+      },
+      {
+        "id": "judgmentAndDocumentation",
+        "weight": "high",
+        "description": "Quality of the consecutive-undo semantics decision: a coherent, documented (README-UNDO.md), and tested choice rather than an accidental behavior."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Fixing symptoms without identifying the actual mechanisms (string seq ordering; reducer resurrecting missing items on adjust) caps rootCauseAnalysis at 2.",
+      "An undo built by rewriting, filtering, or truncating the log violates a critical requirement regardless of behavior.",
+      "Do not reward verbosity; reward precise mechanisms, minimal diffs, and evidence."
+    ]
+  },
+  "notes": "Hard-tier discriminator case: existing codebase, two seeded bugs described only as symptoms, compatibility invariants, and a designed ambiguity (consecutive-undo semantics) that probes judgment. Shipped fixture tests are green; probes fail until both bugs are fixed and undo exists."
+}

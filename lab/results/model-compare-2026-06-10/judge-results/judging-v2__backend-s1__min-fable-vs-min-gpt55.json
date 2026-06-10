@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T12:59:17.248Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T03-47-21-876Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T03-57-59-087Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 4
+    },
+    "correctness": {
+      "A": 4,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs complete the task and clear every critical requirement: all four endpoints work through src/server.mjs honoring PORT, persistence survives a real process restart (proven by a spawned-process test), only Node built-ins are used (zero npm deps), the fixture baseline stays green, and both objective checks (tests + probe-http-lifecycle) pass. Neither verdict is a false pass.\n\nThe runs diverge on evidence depth. Run A's test suite has 10 discrete, independently-named, isolated tests (each endpoint, each error path, unknown-route 404, real-restart persistence), whereas Run B collapses all CRUD + error paths into a single omnibus test plus a restart test (3 total) — Run A's granularity is more diagnostic, giving it the edge on correctness and implementationQuality.\n\nThe decisive gap is evaluationTrustworthiness. Run A's evaluator independently reran npm test (10/10), curled every live endpoint and error path (manual-smoke.log), verified default port 3000 live (default-port.log), performed a real curl-driven restart with data-file inspection (restart-persistence.log), and probed an edge case (/notes/%zz) uncovering a genuine low-severity bug (500 vs 4xx, root-caused to src/server.mjs:162) — 8 SHA256-frozen evidence files, honestly self-rated 'strong'. Run B's evaluator froze a single file (the npm-test rerun) and otherwise relied on code review, with no live HTTP exercise, no default-port check, and no edge probing; it honestly self-rated 'adequate'. Run A's verdict is far better substantiated by reproducible command evidence for the exact behaviors this rubric cares about.\n\nHarness process is a near-tie: identical minimal/flat ceremony, byte-identical boilerplate contracts and plan artifacts. Run A had a generator crash then a clean retry; Run B ran first-try clean — this roughly cancels Run A's richer resulting test suite, so both score 3. Run A's one known bug is low-severity and violates no critical requirement. Overall Run A is the stronger run, primarily on evaluator evidence quality and test granularity."
+}

@@ -4,8 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { computeEvaluationSpecHash, findEvalCase } from '../dist/evals.js';
-import { buildMatrixShipGate, copyMatrixWorkspace, runEvalMatrix, writeMatrixComparisons } from '../dist/eval-matrix.js';
+import { computeEvaluationSpecHash, findEvalCase } from '../dist/lab/cases.js';
+import { buildMatrixShipGate, copyMatrixWorkspace, runEvalMatrix, writeMatrixComparisons } from '../dist/lab/eval-matrix.js';
 
 function makePacket(evalCase, profile, options = {}) {
   const specHash = computeEvaluationSpecHash(evalCase);

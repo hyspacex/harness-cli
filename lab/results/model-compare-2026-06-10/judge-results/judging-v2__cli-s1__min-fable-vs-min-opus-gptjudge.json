@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T12:58:26.863Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T03-35-41-162Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-30-54-015Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "tie",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 5,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 5,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy the locked critical requirements: objective probes pass, npm/node --test passes with the baseline green, bin/task.mjs is exercised end to end, TASKS_FILE override is verified, and required success/error behavior is backed by child-process tests and manual transcripts. Run A has slightly stronger implementation and coverage evidence: 18 tests, explicit TASKS_FILE isolation, corrupt-store handling, store validation, atomic writes, and more exhaustive invalid-id/error checks. Run B is still complete for the prompt, with 16 passing tests, clear stdout/stderr transcripts, override/default-path evidence, and no observed product defect, but its coverage is a little thinner. Process quality favors Run B: it completed cleanly in one generator task and includes smoke/final-regression logs, while Run A had an initial generator process error/restart and a generic harness-authored contract. Because the critical product dimensions are effectively tied and the high-level advantages split between A's implementation depth and B's cleaner process, the overall result is a tie."
+}

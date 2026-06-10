@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:11:48.907Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T04-02-49-926Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-52-15-449Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 5
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 4,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs pass all four objective probe checks and the fixture baseline, both complete in a single repair round (0 repairs), and both use the minimal ceremony ladder with harness-authored contracts. Neither has critical regressions.\n\n**taskFulfillment:** Both implement all four commands with TASKS_FILE override and error paths. Run B goes further: 18 CLI child-process tests vs 15 in A, and the evidence files show B covers additional error sub-cases (missing id, non-numeric id for both done/remove separately, with captured STDOUT/STDERR/exit for each). B's smoke-errors.txt captures 11 distinct error cases with explicit `STDOUT: []` confirmation that stdout stays clean on errors — directly addressing the rubric's exit-code and stderr discipline requirement. A's manual-smoke.txt covers the core cases but is less systematic about stdout-empty confirmation. B scores 5; A scores 4.\n\n**correctness:** Both run 16/19 (A) and 19/19 (B) node --test tests. All pass. Both use child-process invocation against temp TASKS_FILE per test. B has 18 CLI tests vs A's 15 — broader coverage of error sub-paths (missing-id vs unknown-id for done and remove are distinct tests in B). B's npm-test.txt summary format is minimal (just totals), but the evaluator re-ran and confirmed 19/19. A has the full per-test TAP output showing each test name, which is better evidence but the count is lower. The broader test coverage in B edges it to 5; A is a solid 4.\n\n**implementationQuality:** B's generator names the test file `task.test.mjs` (clean, conventional); A uses a redacted name that appears to be `taapi-key-[redacted]` which suggests a potentially odd filename. B's implementation adds a `help`/`-h`/`--help` alias (low-scope, directly useful, noted as \"in-scope\"). A's implementation is also clean but slightly smaller scope. Both use child-process tests correctly. B's smoke evidence explicitly shows STDOUT/STDERR separation for every error case in a machine-readable format, which is stronger implementation evidence. B scores 5; A scores 4.\n\n**harnessProcessQuality:** Both runs use identical minimal ceremony (harness-authored contract, 0 negotiation rounds, same bootstrap artifacts — plan/research-brief.md and plan/spec.md have identical sha256 hashes). Contracts are generic AC01/AC02/AC03 with no CLI-specific acceptance criteria, which is a weakness at this ceremony level for both. Both had one generator process crash (run.error event) requiring a restart before completing on the second attempt — neither penalized differently. Both score 3 (acceptable for minimal ceremony but the contracts add no CLI-specific specificity).\n\n**evaluationTrustworthiness:** A's evaluator evidence is strong: full TAP output per test (16 named subtests), manual-smoke.txt with every command and exit code, stream-separation.txt explicitly probing stdout/stderr discipline. B's evaluator evidence is also strong: smoke-happy.txt and smoke-errors.txt with explicit `STDOUT: []` / `STDERR: [...]` / `exit=N` format for every error case, covering 11 error paths. B's npm-test.txt is summary-only (totals, no per-test names) which is slightly weaker than A's full TAP output — but B compensates with the more thorough smoke-errors.txt format that directly addresses the stderr/stdout-separation requirement. B's evaluator claims 5s across most criteria; A's evaluator claims 4s consistently. The 5s in B are inflated relative to the rubric's \"5 = exceptional and rare\" standard — but the underlying evidence quality is genuinely better than A's. A scores 4; B scores 5 on this dimension because the evidence files directly and reproducibly demonstrate stdout-empty-on-errors in a way A's does not capture as explicitly."
+}

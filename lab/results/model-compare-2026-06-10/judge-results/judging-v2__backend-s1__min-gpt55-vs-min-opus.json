@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:00:57.768Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T03-57-59-087Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T03-30-54-350Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 5
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 3,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy all critical requirements: tests and probe-http-lifecycle objective checks pass, baseline fixture test stays green, no npm dependencies introduced (A: evaluator code review + package.json check; B: explicit import/dependency audit in smoke-results.txt), and persistence is proven by a test in both. The final products differ in depth: Run A ships 3 tests (one bundled endpoint/error-path test plus one restart-persistence test), while Run B ships 10 granular node--test cases mapping one-to-one onto the prompt's enumerated requirements (201 create, list, fetch, delete, restart persistence, 404 GET/DELETE, 400 invalid JSON/missing title/empty body), all green (11/11 including baseline). B's implementation also shows deliberate structure (exported createServer with injectable dataFile, body-size guard, 405 handling) per evidence. Evaluation trustworthiness is the largest gap: A's evaluator only reran npm test (one log file, self-rated 'adequate'), with status-code claims resting on code review and test names; B's evaluator independently reproduced everything with raw HTTP transcripts of every status code and body, a real cross-process kill-and-restart persistence check, a default-PORT-3000 run, and a built-ins-only audit — 7 frozen evidence files with consistent SHA256 manifests. Harness process quality favors A: a clean single-pass run with no errors, whereas B suffered a mid-evaluation run.error ('process exited with code 1') requiring a resume ~73 minutes later that redundantly re-ran the generator (no code changes; it re-verified) — recovery worked correctly via resume, and it did not repeat a failed approach, but it is process noise (evaluator tasksStarted 2 / finished 1). B's evidence also contains an EADDRINUSE server-2.log from the evaluator's own restart probe, recovered on a different port — evidence noise, not a product defect. B's generator touched README/.gitignore, a minor scope addition. Net: B delivers a stronger final product with far stronger, reproducible evidence; A delivers a cleaner process but thinner tests and mostly claim-adjacent evaluator evidence. B wins on the critical and evidence dimensions, which outweigh its process hiccup."
+}

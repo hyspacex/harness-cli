@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:25:26.803Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T04-25-00-598Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T04-19-16-155Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "A",
+  "confidence": 2,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 4
+    },
+    "correctness": {
+      "A": 4,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 4,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs are functionally equivalent: 18/18 tests pass, all four commands work, TASKS_FILE override works, all error paths produce stderr + non-zero exit, no npm dependencies, baseline fixture stays green, and all four objective probes pass. Neither required a repair round. The ceremony level is minimal for both (harness-authored contract, zero negotiation rounds), making harnessProcessQuality identical and low for both — the bootstrapped plan artifacts are deterministic template output, not agent-quality planning.\n\n**taskFulfillment (A:4, B:4):** Both implement every required command, TASKS_FILE override, and all error paths. Run A manual smoke covers more edge cases (done 0, decimal id 1.5, whitespace-only title, list with extra arg, default .tasks.json path, empty TASKS_FILE env var) across three evidence files. Run B manual smoke covers the core happy/error paths in two files. Neither is missing a prompt-required behavior, but A's evidence base is broader.\n\n**correctness (A:4, B:4):** Both have 18/18 test passes confirmed by independent objective probes. Run A's generator explicitly states `execFile(process.execPath, ['bin/task.mjs', ...])` confirming genuine child-process testing. Run B's generator notes `run(argv,{out,err})` is exported for reuse, creating slight ambiguity, but test names (\"exits zero\", \"errors to stderr\") are consistent with child-process observable behavior and the generator also states \"17 child-process tests.\" Run A has a minor parseId/0 semantic gap (accepts 0 as valid syntax but finds \"no task with id 0\" rather than \"invalid id\") — still correct error behavior, just imprecise messaging. Both earn 4; neither has a material correctness regression.\n\n**implementationQuality (A:4, B:4):** Both have clean focused diffs (2 files each), no npm dependencies, 17 child-process tests covering all commands and error paths. Run A explicitly confirms `execFile(process.execPath, ...)` child-process invocation. Run B exports `run()` which is an unnecessary abstraction for a one-file CLI task but not harmful. Both earn 4.\n\n**harnessProcessQuality (A:3, B:3):** Minimal ceremony for both means plan artifacts (research-brief, spec, backlog, eval-criteria, project-principles) are deterministic harness bootstrap output with no agent involvement. Contracts are harness-authored with generic acceptance criteria. Neither run needed repairs. The ceremony level caps quality at 3 — competent execution of a minimal profile, no more.\n\n**evaluationTrustworthiness (A:4, B:3):** Run A's evaluator identified a concrete semantic nuance (parseId regex `^\\d+$` accepting 0 despite \"positive integer\" claim), ran 17 manual invocations documented in a detailed transcript with exact exit codes, produced three separate evidence files, and assigned 4/4 scores consistently with the identified gap. Run B's evaluator identified cosmetic issues (extra-arg silence, literal `<id>` token in error message) but then awarded 5/5 on conceptAlignment and completeness despite these documented gaps — the rubric defines 5 as \"Excellent result with complete behavior,\" which is inconsistent with the evaluator's own observations. The self-inconsistency in Run B's verdict reduces trustworthiness. Run A's evaluation is more disciplined and self-consistent.\n\n**Winner rationale:** Run A wins on evaluationTrustworthiness (4 vs 3). All other dimensions tie. The product quality is essentially identical — both deliver correct, well-tested CLIs. Run A edges ahead due to more rigorous evidence collection (3 vs 2 evidence files, deeper edge-case coverage in smoke logs) and a more honest, internally consistent evaluation that accurately reflected a minor identified gap rather than inflating scores to 5/5 despite documented imperfections. Confidence is low (2) because the implementations appear functionally equivalent and the margin is narrow."
+}

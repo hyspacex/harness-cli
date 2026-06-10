@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:21:28.688Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T04-32-12-977Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T04-19-16-155Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 3,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 3,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [
+    "Run A removed the fixture baseline test: progress.md states the baseline smoke test was 'replaced', generator filesTouched includes test/smoke.test.mjs, and Run A's TAP output (11 tests) contains no 'greenfield fixture baseline stays green' subtest, violating the critical requirement that the fixture baseline test remain green. Run B's TAP output shows the baseline test present and passing as test 1."
+  ],
+  "rationale": "Both runs pass all objective checks (tests + 3 probes) at the same minimal ceremony level with 0 repair rounds and clean final regressions. Run B is stronger on every dimension. Final product: B has 18 child-process tests with each command and error path individually named, including an explicit 'TASKS_FILE override is honored' test and the preserved 'greenfield fixture baseline stays green' test; A has 11 tests, no explicit override test name, and — critically — its own progress.md admits the baseline smoke test was replaced, and the baseline subtest is absent from A's TAP output, breaching the critical requirement that the fixture baseline remain green. Evidence: B's evaluator independently reproduced behavior and froze a cli-manual-smoke.log capturing exact stdout/stderr text and exit codes (exit=0 for all four happy paths, exit=1 for all seven error paths), directly evidencing the judge-focus items on stream/exit-code discipline; A's evaluator froze only a single npm-test.log, asserted stderr/exit behavior in prose, scored a uniform 4 across all criteria, and failed to notice the baseline-test removal. B's evaluator also honestly reported minor cosmetic findings and the generator disclosed the non-atomic-write risk, indicating a more trustworthy verdict pipeline. Process artifacts are structurally identical (harness-authored contract, frozen evidence with manifests), but B's progress.md/handoff/next.md record concrete reproducible commands and outputs while A's are summary-level. A still delivers a working CLI verified by probes, so it is not a failing run, but B wins clearly."
+}

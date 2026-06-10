@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-hard-ledger-undo",
+  "judgedAt": "2026-06-10T14:07:23.429Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T13-40-12-980Z-you-are-working-in-an-existing-event-sourced-inv",
+    "B": "2026-06-10T13-31-04-430Z-you-are-working-in-an-existing-event-sourced-inv"
+  },
+  "evaluationSpecHash": "8ea270da696294644ad2ec0b4c754436827d0669a1a886666dd7aa7485f5c0e1",
+  "winner": "B",
+  "confidence": 3,
+  "dimensionScores": {
+    "rootCauseAnalysis": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "integrationCompatibility": {
+      "A": 5,
+      "B": 5
+    },
+    "verificationDepth": {
+      "A": 4,
+      "B": 5
+    },
+    "judgmentAndDocumentation": {
+      "A": 4,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs correctly identify the two seeded root causes at the mechanism level — not just symptoms. Bug 1: lexicographic string comparison on `seq` in `replay()` causing `\"10\" < \"2\"`, fixed with numeric sort. Bug 2: `items[name] || {qty:0}` in `applyEvent()` resurrecting removed items on adjust, fixed with a no-op skip. Neither run is capped at 2 for rootCauseAnalysis. Both pass all four objective probes identically and preserve the append-only invariant, v1 compatibility, and state output shape.\n\nThe margin favoring B comes from three areas:\n\n**correctness (A:4 vs B:5):** B includes an explicit named test \"a log containing undo markers remains replayable to the same state\" (test 17), which directly verifies the event-sourcing invariant that a full replay of a log including undo markers produces correct state. A's compensation-payload approach (appending unadd/unadjust/unremove typed events) is also valid but introduces new event types whose replay behavior is not verified with a dedicated named test — covered only partially through adversarial probes. B's logical-skip marker approach is cleaner and more explicitly tested.\n\n**verificationDepth (A:4 vs B:5):** B has 17 named regression tests including explicit exhaustion coverage (\"undo errors once everything has already been undone\"), undo replayability, and two CLI-refusal tests (never-added and removed). A runs 7 ad-hoc edge probes beyond the test suite (which does provide coverage), but named regression tests are more durable evidence. A's golden verification uses sha256 (strong), B uses md5 (adequate). Both independently reproduced all tests.\n\n**judgmentAndDocumentation (tie at 4):** Both choose linear peel-back with no redo, document it in README-UNDO.md, and cover it with tests. B notes an additional CLI-unreachable semantic boundary (undo targeting \"most recent logged command\" vs \"most recent effective command\") and explicitly documents it — a marginally more thorough treatment. However neither rises to a 5 (exceptional) since the documentation, while coherent, does not include unusually deep reasoning about the tradeoffs of the chosen design.\n\n**Process quality:** B completed in ~9 minutes (generator: 4:22, evaluator: 4:38) vs A's ~12 minutes (generator: 6:42, evaluator: 5:29), with 0 repair rounds in both cases. B's harness process was more efficient. Both evaluators rated high confidence and strong evidence quality. The margin is real but modest — both runs are strong deliveries for a hard case."
+}

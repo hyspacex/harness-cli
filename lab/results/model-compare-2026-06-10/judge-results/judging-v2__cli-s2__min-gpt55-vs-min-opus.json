@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:10:58.896Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T04-14-01-601Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-52-15-449Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 5,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 5
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 4,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "I located both workspaces on disk (mapped by run ID only) and verified everything live rather than trusting packet claims. Both runs fully satisfy the critical requirements: all four commands work through bin/task.mjs, every error path (missing/unknown command, missing/empty title, missing/non-numeric/unknown id, corrupt storage) exits 1 with clear stderr and empty stdout, TASKS_FILE override and default tasks.json both work, no npm dependencies, baseline fixture test stays green, and both full suites pass when I re-ran them (A: 3/3, B: 19/19). All probe-* checks pass for both. Correctness is therefore 5/5 for both, confirmed by my own child-process probes. B wins on margins. taskFulfillment: A rejects a pre-existing empty TASKS_FILE (verified: `TASKS_FILE=$(mktemp) task add` exits 1 'Task file is not valid JSON data'), a real-world wart on the storage-override surface that A's own evaluator flagged; B handles the same case gracefully (exit 0). implementationQuality: B has 18 granular, individually isolated child-process tests vs A's 2 coarse blocks; B's CLI includes usage text on stderr for command errors, a documented UserError separation, and per-case temp-dir isolation; A counters with stricter store-schema validation and stable nextId (B reuses ids after removing the max), but B's test architecture and diagnostics are stronger overall. evaluationTrustworthiness: A's evaluator was honest and skeptical (medium confidence, all 4s, found and froze repro evidence for the handoff mktemp bug with full command/cwd/exit provenance) — genuinely good; but B's evaluator live-exercised the happy path plus 11 distinct error cases with captured stdout/stderr/exit per case, and every claim I spot-checked reproduced exactly, making its 5s evidence-backed rather than inflated (minor ding: npm-test.txt lacks command/cwd header). harnessProcessQuality is a wash at 4/4: both used identical minimal-ceremony bootstrap artifacts and harness-authored contracts with zero repair rounds; A ran clean in ~5 minutes but shipped a broken smoke command in handoff/next.md, while B produced markedly richer progress/handoff artifacts but suffered one generator process crash (run.error, tasksStarted=2/finished=1, ~41 minutes lost before resume). No critical regressions in either run; no false passes detected — both verdicts matched what I independently reproduced."
+}

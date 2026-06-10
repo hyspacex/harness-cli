@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "builtAt": "2026-06-10T04:19:16.061Z",
+  "results": [
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profile": "min-opus",
+      "ok": false,
+      "status": "failed",
+      "runDir": "/tmp/model-compare2/cli-s2/isolates/bench-cli-task-tracker/min-opus/run-root/runs/2026-06-10T03-52-15-449Z-build-a-command-line-task-tracker-as-a-node-js-e",
+      "packetPath": "/tmp/model-compare2/cli-s2/packets/bench-cli-task-tracker/min-opus/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/cli-s2/packets/bench-cli-task-tracker/min-opus/packet.md",
+      "error": "Claude Code process exited with code 1"
+    },
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profile": "min-fable",
+      "ok": false,
+      "status": "failed",
+      "runDir": "/tmp/model-compare2/cli-s2/isolates/bench-cli-task-tracker/min-fable/run-root/runs/2026-06-10T04-02-49-926Z-build-a-command-line-task-tracker-as-a-node-js-e",
+      "packetPath": "/tmp/model-compare2/cli-s2/packets/bench-cli-task-tracker/min-fable/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/cli-s2/packets/bench-cli-task-tracker/min-fable/packet.md",
+      "error": "Claude Code process exited with code 1"
+    },
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profile": "min-gpt55",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/cli-s2/isolates/bench-cli-task-tracker/min-gpt55/run-root/runs/2026-06-10T04-14-01-601Z-build-a-command-line-task-tracker-as-a-node-js-e",
+      "packetPath": "/tmp/model-compare2/cli-s2/packets/bench-cli-task-tracker/min-gpt55/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/cli-s2/packets/bench-cli-task-tracker/min-gpt55/packet.md"
+    }
+  ],
+  "comparisons": [
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profileA": "min-fable",
+      "profileB": "min-gpt55",
+      "outDir": "/tmp/model-compare2/cli-s2/comparisons/bench-cli-task-tracker/min-fable-vs-min-gpt55",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profileA": "min-fable",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/cli-s2/comparisons/bench-cli-task-tracker/min-fable-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profileA": "min-gpt55",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/cli-s2/comparisons/bench-cli-task-tracker/min-gpt55-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    }
+  ],
+  "shipGate": {
+    "version": 1,
+    "status": "fail",
+    "ok": false,
+    "checks": [
+      {
+        "id": "all-runs-completed",
+        "status": "fail",
+        "message": "2 run(s) failed, were missing, or did not complete."
+      },
+      {
+        "id": "packets-built",
+        "status": "pass",
+        "message": "Packets were built for every run with a run directory."
+      },
+      {
+        "id": "required-objective-checks",
+        "status": "fail",
+        "message": "4 required objective check(s) failed."
+      },
+      {
+        "id": "pairwise-judging",
+        "status": "warning",
+        "message": "Comparisons are dry-run prompts only; rerun with --judge-provider for judged evidence."
+      },
+      {
+        "id": "profile-artifact-isolation",
+        "status": "pass",
+        "message": "Each packetized profile has a distinct workspace and run directory."
+      }
+    ]
+  }
+}

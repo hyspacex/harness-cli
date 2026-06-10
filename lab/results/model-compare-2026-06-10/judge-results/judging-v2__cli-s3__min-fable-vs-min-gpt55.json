@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:20:07.347Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T04-25-00-598Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T04-32-12-977Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 4
+    },
+    "correctness": {
+      "A": 5,
+      "B": 3
+    },
+    "implementationQuality": {
+      "A": 5,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [
+    "Run B's generator replaced test/smoke.test.mjs ('Replaced the baseline smoke test...') and its 11-test suite contains no 'greenfield fixture baseline stays green' test, unlike Run A where it is test #1. This risks the critical requirement that the fixture baseline test remain green; Run B's evaluator did not catch or address this."
+  ],
+  "rationale": "Both runs use identical minimal ceremony (harness-authored contract, 0 negotiation rounds, bootstrapped plan artifacts) and both pass all four objective checks (tests + three probes) with green final regression, so harness process and product are genuinely comparable. Both implement all four commands, the TASKS_FILE override, and stderr/non-zero error discipline, with tests that drive the real executable via execFile(process.execPath, ['bin/task.mjs', ...]) rather than importing internals — so neither is capped at correctness 3 for that reason.\\n\\nRun A is the stronger run on every dimension. (1) Correctness/baseline: Run A adds a separate test file and leaves the pre-existing baseline fixture test untouched (it appears as test #1, 'greenfield fixture baseline stays green', and stays green at 18/18). Run B's generator explicitly 'Replaced the baseline smoke test' and modified test/smoke.test.mjs; its 11-test suite no longer contains the fixture baseline test at all. The locked critical requirement says the fixture baseline test must remain green — Run B effectively removed it, which is a real regression even though the harness-level tests probe still passes. (2) Coverage: Run A has 18 tests including corrupt-JSON, wrong-shape store, empty-title, whitespace-title, list-extra-arg, and a done-0 boundary; Run B has 11 with thinner error-path coverage. (3) Evidence/trustworthiness: Run A's evaluator independently reproduced every claim and saved three frozen evidence files (npm-test.log, full manual-smoke transcript with exit codes and stored JSON, and edge-cases.log), and honestly flagged a low-severity parseId('0') nit. Run B's evaluator saved only npm-test.log, did less independent probing, claimed strong evidence, and missed the baseline-test replacement. (4) Diff discipline: Run A touched only bin/task.mjs and the new test file; Run B touched the baseline test too.\\n\\nRun B is not bad — it adds atomic writes (temp file + rename) which is a craft positive, and its tests are legitimate child-process tests — but the baseline-test replacement plus markedly thinner evidence make it clearly weaker. Winner: A with high confidence; confidence held at 4 rather than 5 because B's product still functions correctly and the baseline concern is inferred from filesTouched + absent test rather than a failing check."
+}

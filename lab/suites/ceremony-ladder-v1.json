@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "ceremony-ladder-v1",
+  "description": "Fixed benchmark grid for measuring how much ceremony each model actually needs: 8 app prompts across frontend, backend, and CLI work, run at every rung of the ceremony ladder (full-harness, flat, minimal). Results are frozen under lab/results/frozen/ for cross-run comparison and feed the ceremony ROI report (harness eval roi).",
+  "cases": [
+    "bench-backend-notes-api",
+    "bench-cli-task-tracker",
+    "bench-frontend-status-page",
+    "examples-adaptive-dashboard-filtering",
+    "examples-quiz-error-state",
+    "examples-tutor-demo-fallback",
+    "harness-cli-error-ergonomics",
+    "harness-cli-scope-discipline"
+  ],
+  "profiles": [
+    "full-harness",
+    "flat",
+    "minimal"
+  ]
+}

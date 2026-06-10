@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:04:20.808Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T03-47-21-876Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T03-30-54-350Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "B",
+  "confidence": 3,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 4,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs pass all objective checks (tests + probe-http-lifecycle), use only Node.js built-ins, implement all four endpoints, and prove persistence across a real process restart.\n\n**taskFulfillment (B wins, 5 vs 4):** Run B has 11 tests vs Run A's 10. The extra test — \"POST /notes returns 400 for an empty body\" — is a distinct sub-case of the prompt's explicit \"400 for invalid request bodies\" requirement, not redundant padding. Run B's generator produced wider error-path coverage without scope creep, directly fulfilling the prompt more completely.\n\n**correctness (tie, 4 each):** Both pass all objective checks. Run A's evaluator discovered a real bug: malformed percent-encoding in /notes/:id returns 500 instead of 4xx (confirmed by malformed-uri.log and edge-server.log). Run B's evaluator never probed this path; the same defect may exist in B's implementation undetected. Neither run has verified clean malformed-URI handling, so correctness is capped at 4 for both.\n\n**implementationQuality (tie, 4 each):** Both use only node: built-in imports (confirmed by objective checks), implement all required routes, and include black-box node --test suites that spawn the real entry point on ephemeral ports with isolated data files. No source code artifacts were surfaced to assess routing/storage separation in depth, preventing a 5. Minor edge: Run B's DELETE returns 200 with the deleted note body (the prompt doesn't mandate 204), Run A's returns 204 — both are conformant per the probe which accepts 200 and 204.\n\n**harnessProcessQuality (tie, 3 each):** Both runs are at minimal ceremony with harness-authored contracts and bootstrapped plan artifacts — the planning artifacts are generically identical (same SHA on eval-criteria.json, project-principles.md, and both spec/research-brief files). Both runs had one crash-and-restart: Run A's generator crashed (process exit code 1) and restarted after ~67 minutes; Run B's evaluator crashed (process exit code 1) and restarted. A crash-and-restart is a quality defect at any ceremony level. Neither run used the repair loop (repairRoundsToPass=[0] in both). The contracts are generic minimal-ceremony stubs with no feature-specific criteria.\n\n**evaluationTrustworthiness (A wins, 4 vs 3):** Run A's evaluator produced adversarial evidence (malformed-uri.log finding a real 500 bug), reproduced all happy-path and persistence claims with separate logs, and scored conservatively (all 4s) — the calibration is honest. Run B's evaluator awarded 5/5 on verificationEvidence despite: (1) never probing adversarial inputs like malformed URIs; (2) having a port-conflict flaw in its own persistence test methodology (server-2.log shows EADDRINUSE on port 3457, meaning the evaluator's first attempt to start a second server failed — persistence was confirmed by working around this with different ports in smoke-results.txt). Giving verificationEvidence a 5 when the test methodology had a recoverable but real flaw and skipped adversarial probing is score inflation. Run B's evaluator is overconfident relative to the evidence it produced.\n\n**Winner B** on the strength of the critical taskFulfillment dimension (5 vs 4), driven by genuinely more complete error-path test coverage. The confidence is 3/5 because B's evaluator trustworthiness is lower (3 vs 4 for A), leaving open the possibility that the malformed-URI 500 bug exists in B's workspace and went undetected."
+}

@@ -10,17 +10,49 @@ Inspired by Anthropic's ["Building effective agents"](https://www.anthropic.com/
 
 ## Why this exists
 
-Coding agents are powerful at single tasks: write a function, fix a bug, scaffold a component. But building a whole application requires *sustained multi-step reasoning* across many sessions — and that's where single-session agents lose the thread.
+This harness began as scaffolding for a real weakness: coding agents lost the thread on multi-session application builds, so bounded roles (research, plan, generate, evaluate), negotiated contracts, and durable state carried them across long tasks. Modern models need far less of that ceremony — they plan, build, and self-correct across hours in a single session.
 
-Harness CLI solves this with **separation of concerns**:
+What no model can do, however capable, is certify its own work. That trust boundary is structural, and it is where the harness earns its keep: **minimal ceremony, maximal verification, chosen by evidence.**
 
-- **Bounded roles** — Each agent has a specific job (research, plan, generate, evaluate) with a clear contract. No single session needs to hold the whole problem in context.
-- **Bilateral contracts** — Before writing code, the generator and evaluator negotiate an explicit "done" definition with negotiable pass bars. This prevents scope drift and makes evaluation objective.
-- **Durable state** — Every sprint persists its plan, contract, code, and evaluation to disk. The harness can resume mid-sprint, mid-negotiation, or mid-repair — without asking the model to remember anything.
-- **Harness-enforced quality** — The evaluator scores against anchored rubrics. The harness writes an independent verdict by checking every score against thresholds. No rubber-stamping.
-- **Split routing** — Different roles can use different providers. Research with Claude, generate with Codex, evaluate with Claude — mix and match based on what works.
+- **Harness-enforced verification** — Independent verdicts computed from anchored scores, frozen evidence with SHA256 manifests, dev-server smoke gates, and a final regression sweep. Mandatory at every ceremony level; never a dial.
+- **A ceremony ladder, not a fixed pipeline** — Role separation and contract negotiation are explicit dials (`full` → `flat` → `minimal`). Strong models run with near-zero ceremony; weaker or cheaper models keep the structure they measurably need.
+- **Cross-model measurement** — A fixed benchmark suite, per-role metrics, frozen matrix results, and a ceremony ROI report answer "which provider, with how much structure, ships this kind of app" with evidence instead of assumptions.
+- **Durable, provider-neutral state** — Every artifact and decision persists to disk. Runs resume mid-sprint, mid-negotiation, or mid-repair without depending on any vendor's session format.
+- **Split routing** — Different roles can use different providers. Research with Claude, generate with Codex, evaluate with Claude — mix and match based on what the metrics say works.
+
+## The ceremony ladder
+
+`runtimeMode` controls how much orchestration structure a run uses:
+
+| Rung | Research / plan | Contract | Verification |
+|---|---|---|---|
+| `full` | separate researcher and planner tasks | generator drafts, evaluator reviews, up to N negotiation rounds | mandatory |
+| `flat` | bootstrapped deterministically | generator drafts, one evaluator review | mandatory |
+| `minimal` | bootstrapped deterministically | authored by the harness, zero negotiation | mandatory |
+
+Each structural element is also an explicit dial: `ceremony.researcher`, `ceremony.planner`, and `ceremony.negotiationRounds` in config override the mode defaults, and `--max-repair-rounds` budgets repair. What is *not* a dial: independent verdicts, frozen evidence, smoke gates, and the final regression. Ceremony is negotiable; verification is not.
+
+Don't guess which rung a model needs — measure it:
+
+```bash
+# Run the fixed benchmark suite across the ladder (8 cases x 3 rungs)
+npm run harness -- lab matrix --suite --execute true
+
+# Aggregate run history: does ceremony pay for itself per provider?
+npm run harness -- eval roi
+
+# Evidence-based profile recommendation for new work
+npm run harness -- profiles --recommend "Build a small CRM dashboard"
+
+# Or let the harness pick the profile itself
+npm run harness -- run "Build a small CRM dashboard" --profile adaptive
+```
+
+`harness run --profile adaptive`, adaptive matrix selection (`--profiles adaptive`), and `profiles --recommend` all prefer the cheapest profile whose measured completion rate is within tolerance of the best, falling back to keyword heuristics until enough run history exists. `harness eval roi` reports, per provider, whether negotiation and role separation are buying enough first-round pass rate to justify their cost.
 
 ## How it works
+
+The diagram below shows the `full` rung; `flat` and `minimal` collapse the research/plan/negotiation boxes while keeping every verification gate.
 
 ```
 You: "Build a project management app with Kanban boards"
@@ -149,7 +181,7 @@ Uses OpenAI's `codex app-server` via JSON-RPC. The harness manages auth, thread 
 
 In this example, `researcher` and `evaluator` use Claude while `planner` and `generator` route to Codex. The harness records per-role/provider performance metrics so you can compare routing strategies empirically.
 
-When multiple providers are used, the harness freezes benchmark artifacts under `benchmarks/frozen/` so later comparisons use stable inputs.
+When multiple providers are used, the harness freezes benchmark artifacts under the run's `benchmarks/frozen/` directory so later comparisons use stable inputs.
 
 ## Configuration
 
@@ -280,12 +312,22 @@ The harness is not locked to web apps. The researcher generates project-specific
 
 Adjust `smoke.*` commands and evaluator tooling to match your project. See [docs/generalization.md](docs/generalization.md) for details.
 
-## Eval workbench
+## The Lab
 
-Harness evals let you compare complete runs against fixed cases with locked rubrics, deterministic objective checks, and packetized artifacts. Matrix mode can run the same case across multiple execution profiles, including the adaptive selector that expands to the recommended profile set for the case category.
+The repo has two layers with a one-way dependency: **Core** (`src/core/`, everything above — the product) and the **Lab** (`src/lab/`, the model/provider characterization instrument). The lab compares complete runs against fixed cases with locked rubrics, blinded pairwise judges, deterministic behavior probes, and fixed benchmark suites:
+
+```bash
+npm run harness -- lab list
+npm run harness -- lab compare --case <id> --a <runDir> --b <runDir> --blind-judge true --judge-provider claude-sdk
+npm run harness -- lab matrix --suite --execute true   # ceremony-ladder benchmark grid
+```
+
+The fixed benchmark suite (`lab/suites/ceremony-ladder-v1.json`) runs 8 app prompts — frontend, backend, and CLI — across the ceremony ladder (`full-harness`, `flat`, `minimal`) and freezes results under `lab/results/frozen/`. The lab uses Core as its test rig; Core never depends on it. Lab evidence informs profile defaults, real runs feed `eval roi` and `profiles --recommend`, and new questions become new lab cases.
 
 Useful docs:
 
+- [lab/README.md](lab/README.md) — lab commands, layout, and methodology lessons from cross-model benchmarks.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the core/lab split and the boundary rule.
 - [Adaptive agent workbench](docs/adaptive-workbench.md) explains profiles, adaptive profile selection, and matrix execution.
 - [Harness evals](docs/harness-evals.md) explains eval packets, pairwise judging, objective checks, and matrix reports.
 - [Eval release gates](docs/eval-release-gates.md) defines the current "good enough to ship" checklist.
@@ -294,16 +336,18 @@ Useful docs:
 
 ```
 harness init     [--config path]                     Write default config
-harness profiles [--config path]                     List execution profiles
+harness profiles [--config path] [--recommend "p"]   List profiles / evidence-based recommendation
 harness run      "prompt" [flags]                    Start a new run
 harness resume   <run-id> [--config path]            Resume interrupted run
 harness status   [run-id] [--config path]            Inspect runs
-harness eval     <list|packet|compare|matrix>        Build packets and compare runs
+harness lab      <list|packet|compare|matrix>        Model/provider characterization (packets, blinded comparisons, benchmark suites)
+harness eval     roi                                 Ceremony ROI report from run history (old eval subcommands are deprecated aliases for lab)
 
 Flags:
   --config <path>                Config file (default: ./harness.config.json)
   --profile <name>               Execution profile for run/status or one matrix profile
   --provider <name>              claude-sdk | codex
+  --runtime-mode <mode>          Ceremony ladder rung: full | flat | minimal
   --workspace <path>             Project directory
   --run-root <path>              Artifact storage directory
   --approval <policy>            allow_once | allow_always | reject_once | reject_always

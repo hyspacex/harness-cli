@@ -68,7 +68,7 @@ The CLI currently compares existing run directories. It does not yet create base
 List cases:
 
 ```bash
-npm run harness -- eval list
+npm run harness -- lab list
 ```
 
 Run the harness for a case manually. Use the case prompt and matching sprint budget from the case JSON:
@@ -85,7 +85,7 @@ npm run harness -- run \
 Build a packet for an existing run:
 
 ```bash
-npm run harness -- eval packet /tmp/candidate-runs/runs/<run-id> \
+npm run harness -- lab packet /tmp/candidate-runs/runs/<run-id> \
   --case examples-adaptive-dashboard-filtering \
   --workspace /tmp/candidate-workspace \
   --out /tmp/candidate-packet.json \
@@ -96,7 +96,7 @@ npm run harness -- eval packet /tmp/candidate-runs/runs/<run-id> \
 Compare two runs without calling a judge:
 
 ```bash
-npm run harness -- eval compare \
+npm run harness -- lab compare \
   --case examples-adaptive-dashboard-filtering \
   --a /tmp/baseline-runs/runs/<run-id> \
   --b /tmp/candidate-runs/runs/<run-id> \
@@ -106,7 +106,7 @@ npm run harness -- eval compare \
 Compare two runs with an LLM judge:
 
 ```bash
-npm run harness -- eval compare \
+npm run harness -- lab compare \
   --case examples-adaptive-dashboard-filtering \
   --a /tmp/baseline-runs/runs/<run-id> \
   --b /tmp/candidate-runs/runs/<run-id> \
@@ -164,7 +164,7 @@ If the case needs a better rubric, update it intentionally and treat the next re
 
 ## Eval Case Shape
 
-Cases live under `evals/cases/*.json`.
+Cases live under `lab/cases/*.json` (benchmark `bench-*` cases) and `evals/cases/*.json` (product-facing examples). Case discovery scans both; lab wins on id collision.
 
 ```json
 {
@@ -305,13 +305,14 @@ Required objective-check failures are treated as release-gating failures in matr
 
 The current implementation provides:
 
-- `harness eval list`
-- `harness eval packet <runDir> --case <caseId|path> --out <packet.json> --markdown --objective-checks true`
-- `harness eval compare --case <caseId|path> --a <runDir> --b <runDir> --out <dir> --objective-checks true`
-- `harness eval matrix --case <caseId|path|all> --profiles <selection> --execute true`
-- `harness eval matrix report --from <matrixOutDir> --objective-checks true`
-- optional LLM judging with `--judge-provider claude-sdk|codex`
+- `harness lab list`
+- `harness lab packet <runDir> --case <caseId|path> --out <packet.json> --markdown --objective-checks true`
+- `harness lab compare --case <caseId|path> --a <runDir> --b <runDir> --out <dir> --objective-checks true`
+- `harness lab matrix --case <caseId|path|all> --profiles <selection> --execute true`
+- `harness lab matrix report --from <matrixOutDir> --objective-checks true`
+- optional LLM judging with `--judge-provider claude-sdk|codex`, plus `--blind-judge true` (redact profile/provider/model identifiers from judge prompts) and `--judge-model <model>` (non-participant judging)
 - dry-mode prompt generation when no judge provider is supplied
+- the old `harness eval <list|packet|compare|matrix>` forms as deprecated aliases
 
 Matrix mode defaults each case/profile run into `isolates/<case>/<profile>/workspace` and `isolates/<case>/<profile>/run-root`, unless `--in-place true` or `--run-root` overrides that layout. This does not replace OS-level sandboxing, but it makes accidental profile artifact reuse easier to avoid and audit.
 

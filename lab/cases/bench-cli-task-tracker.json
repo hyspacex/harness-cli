@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "id": "bench-cli-task-tracker",
+  "title": "CLI: task tracker with JSON storage",
+  "category": "cli",
+  "prompt": "Build a command-line task tracker as a Node.js ESM executable (no npm dependencies). The executable must live at bin/task.mjs so `node bin/task.mjs <command>` works from the workspace root. Support `task add \"title\"`, `task list`, `task done <id>`, and `task remove <id>`, storing tasks in a JSON file whose path can be overridden with the TASKS_FILE environment variable. Invalid commands, missing arguments, and unknown ids must print a clear error to stderr and exit non-zero, while successful commands exit zero with readable output (list output must include each task's title). Cover every command and every error path with node --test tests that invoke the CLI as a child process against a temp TASKS_FILE.",
+  "workspaceFixture": "lab/fixtures/greenfield",
+  "harnessConfig": {
+    "maxSprints": 3,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "test": "npm test"
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "tests",
+      "argv": ["npm", "test"],
+      "cwd": ".",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "probe-add-list",
+      "command": "rm -f .probe-tasks.json && TASKS_FILE=.probe-tasks.json node bin/task.mjs add 'probe item' && TASKS_FILE=.probe-tasks.json node bin/task.mjs list | grep -i 'probe item' >/dev/null && test -s .probe-tasks.json",
+      "cwd": ".",
+      "timeoutMs": 30000
+    },
+    {
+      "id": "probe-unknown-id-fails",
+      "command": "rm -f .probe-tasks.json && TASKS_FILE=.probe-tasks.json node bin/task.mjs add 'x' >/dev/null && if TASKS_FILE=.probe-tasks.json node bin/task.mjs done 999999 2>.probe-err.txt; then exit 1; fi && test -s .probe-err.txt",
+      "cwd": ".",
+      "timeoutMs": 30000
+    },
+    {
+      "id": "probe-unknown-command-fails",
+      "command": "if node bin/task.mjs frobnicate 2>.probe-err2.txt; then exit 1; fi && test -s .probe-err2.txt",
+      "cwd": ".",
+      "timeoutMs": 30000
+    }
+  ],
+  "judgeFocus": [
+    "exit-code and stderr discipline on every error path",
+    "tests drive the real CLI as a child process, not internal functions only",
+    "TASKS_FILE override works and tests use it for isolation",
+    "no npm dependencies introduced"
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "All four commands must work end to end through the executable at bin/task.mjs.",
+      "Every error path must exit non-zero with a clear stderr message.",
+      "TASKS_FILE must override the storage location.",
+      "The fixture baseline test must remain green.",
+      "All probe-* objective checks must pass; they exercise the real CLI."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace implements the commands, storage override, and error behavior described in the prompt."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether tests pass, exit codes and streams are used correctly, and state transitions (add/done/remove) behave without regressions."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, clean argument parsing, small focused diff, and child-process test coverage of real CLI behavior."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of planning artifacts, contract specificity, and repair-loop behavior relative to the ceremony level used."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts are backed by reproducible command evidence rather than claims."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Tests that only import internal functions without exercising the executable should cap correctness at 3.",
+      "Prefer concrete test output evidence over implementation claims."
+    ]
+  },
+  "notes": "Part of the ceremony-ladder benchmark suite. Designed to compare ceremony levels and providers on identical CLI work."
+}

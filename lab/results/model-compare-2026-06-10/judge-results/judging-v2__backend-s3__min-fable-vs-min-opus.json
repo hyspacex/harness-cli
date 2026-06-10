@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:29:22.204Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T04-43-46-759Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-36-58-324Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "B",
+  "confidence": 3,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs pass all objective checks (tests, probe-http-lifecycle) and produce working implementations using only Node.js built-in modules. Both are minimal-ceremony runs with harness-authored contracts, so harnessProcessQuality is similarly limited in both.\n\n**Run A strengths:**\n- 10/10 tests passing including persistence-across-restart and CLI PORT test\n- Excellent evaluator evidence: dedicated persistence-restart.txt with port-closed verification, live-smoke-curl.txt covering all error paths, write-queue-poisoning.txt probing a failure-recovery edge case\n- The evaluator ran fully independent verification, confirmed port-closed between restart legs — exceptional rigor\n- Evidence quality is genuinely strong and diagnostic\n\n**Run A weaknesses:**\n- Evaluator found a real write-queue-poisoning bug (low severity): a failed flush permanently poisons the write queue, causing all subsequent mutations to 500 until restart. This is a structural defect in the persistence layer, even if outside the strict contract requirements. The evaluator correctly identified and reproduced it.\n- This bug represents a real correctness gap under error conditions, warranting a completeness score of 4 rather than 5.\n\n**Run B strengths:**\n- 12/12 tests passing — 2 more tests than Run A, with better separation of error cases (GET 404 and DELETE 404 as separate tests, plus empty body test)\n- clean-smoke.log covers all required paths including double-DELETE (404 on second attempt), persistence-across-restart, method-not-allowed — very thorough live verification\n- No bugs found — cleaner implementation without the write-queue-poisoning issue\n- Test count and naming is more granular and better matches the prompt's explicit requirements\n- The evaluator's transparent disclosure of the EADDRINUSE false-start and re-run on a clean port shows methodological integrity\n\n**Run B weaknesses:**\n- The initial smoke attempt hit a leftover foreign server (EADDRINUSE on port 3999), and live-smoke.log shows stale data from a prior run in the GET /notes list response — the evaluator correctly detected and disclosed this, but it slightly muddies the evidence trail\n- The evaluator's first smoke log (live-smoke.log) is partially tainted (shows pre-existing notes from a prior run); only clean-smoke.log represents clean evidence\n\n**Comparative judgment:**\nRun B produces a cleaner implementation (no write-queue-poisoning bug), more comprehensive test coverage (12 vs 10 tests, with better error-case granularity), and passes all checks cleanly. The `completeness` dimension is genuinely 5 for B vs 4 for A because the confirmed bug in A is a real structural defect.\n\nRun A's evaluator evidence is slightly more impressive in its rigor (dedicated persistence restart with port-closed verification, explicit failure-recovery probing), while Run B's evaluator is honest about its own methodology issues.\n\nThe product quality difference (bug-free vs known write-queue bug, 12 vs 10 tests) gives B a meaningful edge on the two critical dimensions. The margin is real but not dramatic — both are competent implementations.\n\nharnessProcessQuality is equal for both: identical minimal-ceremony profiles with harness-authored contracts that are generic (not prompt-specific), same bootstrap planning artifacts. Neither run demonstrates meaningful contract specificity beyond the generic AC01/AC02/AC03 template."
+}

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T12:56:43.155Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T03-47-08-492Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-30-54-015Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 3,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 3,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [
+    "Run A deleted the fixture baseline test (test/smoke.test.mjs, 'greenfield fixture baseline stays green'); its workspace and TAP output confirm it no longer exists, violating the locked critical requirement that the fixture baseline test must remain green. Run A's evaluator did not flag this and still scored 'repository-native' as pass."
+  ],
+  "rationale": "Independently verified both workspaces: ran npm test (16/16 green in both) and manually exercised add/list/done/remove plus error paths through bin/task.mjs in each — both products fully implement the prompt with correct exit codes, stderr discipline, TASKS_FILE override, child-process tests, and no npm dependencies. The decisive correctness gap: Run A replaced/deleted the fixture baseline test (confirmed in its workspace: only test/task-cli.test.mjs exists; no baseline subtest in its TAP output; its progress.md admits the replacement), violating a locked critical requirement, while Run B kept the baseline green as test #1 alongside 15 additive CLI tests. On evaluation trustworthiness, Run B's evaluator independently reproduced every command and all seven error paths with captured exit codes and stderr, override persistence, nested-dir creation, and default fallback, freezing four transcript evidence files; Run A's evaluator froze only a single npm-test.log, labeled it 'strong' evidence, and missed the baseline deletion — a partially claim-based, less skeptical verdict. Implementation quality is comparable (A has stricter file-shape validation and corrupt-file tests; B has a purely additive focused diff and cleaner stream usage, with a minor self-disclosed process.exit(0) wart). Harness process is identical minimal-ceremony in both: same bootstrap artifacts, generic harness-authored contract, zero repair rounds, frozen evidence, green final regression — tie at 3. Run B wins on the critical baseline requirement and substantially stronger, reproducible evaluation evidence."
+}

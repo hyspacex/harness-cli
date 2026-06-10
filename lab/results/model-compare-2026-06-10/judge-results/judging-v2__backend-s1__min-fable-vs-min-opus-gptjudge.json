@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:05:16.276Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T03-47-21-876Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T03-30-54-350Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 4
+    },
+    "correctness": {
+      "A": 4,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 5,
+      "B": 3
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [
+    "Run A has a non-critical edge bug: malformed percent-encoding in /notes/:id returns 500 instead of a client-error JSON response.",
+    "Run B's persistence evidence is internally inconsistent: one frozen restart log shows server-2 failed with EADDRINUSE, while later summary evidence claims cross-process restart success without equally complete raw HTTP/server logs.",
+    "Run B's implementation evidence indicates simpler read-modify-write file persistence without atomic writes or write serialization, and tests appear more coupled to an exported server helper than Run A's black-box child-process tests."
+  ],
+  "rationale": "Both runs satisfy the core API requirements at a passable level: tests pass, the objective probe passes, no npm dependencies are shown, POST/list/fetch/delete work, 400/404 JSON error paths are covered, and persistence is claimed and at least partly evidenced. Run A is stronger overall because its product is more robust and its evidence is more concrete: raw npm test output, full live HTTP logs, default-port verification, actual restart logs, frozen evidence hashes, and an evaluator that found and documented a real edge-case bug. Its implementation also shows better persistence quality with atomic writes and serialized writes, plus black-box tests that spawn src/server.mjs on ephemeral ports. Run B also passes, but its evaluator overstates certainty: the frozen evidence includes a failed restart attempt with EADDRINUSE, the later successful persistence proof is mostly summarized, and the implementation is simpler and less resilient. Run A therefore wins despite the malformed-URI edge bug, which is outside the explicit locked critical requirements."
+}

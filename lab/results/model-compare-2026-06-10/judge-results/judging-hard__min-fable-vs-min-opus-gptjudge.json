@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-hard-ledger-undo",
+  "judgedAt": "2026-06-10T14:09:02.533Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T13-40-12-980Z-you-are-working-in-an-existing-event-sourced-inv",
+    "B": "2026-06-10T13-31-04-430Z-you-are-working-in-an-existing-event-sourced-inv"
+  },
+  "evaluationSpecHash": "8ea270da696294644ad2ec0b4c754436827d0669a1a886666dd7aa7485f5c0e1",
+  "winner": "A",
+  "confidence": 1,
+  "dimensionScores": {
+    "rootCauseAnalysis": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "integrationCompatibility": {
+      "A": 5,
+      "B": 4
+    },
+    "verificationDepth": {
+      "A": 5,
+      "B": 4
+    },
+    "judgmentAndDocumentation": {
+      "A": 5,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy the major objective checks, correctly identify the two seeded mechanisms (lexicographic seq ordering and adjust resurrecting missing items), preserve append-only behavior, add undo, and keep tests passing without dependencies. Run A is stronger overall: its undo design uses self-contained compensation payloads, its evaluator ran additional adversarial probes beyond the shipped tests, and its evidence explicitly covers edge cases such as no-op historical adjust undo, interleaved undo exhaustion, unremove after unadjust, history preservation, golden checksum stability, and log-prefix append-only behavior. Run B is also good, but its marker-only logical-skip undo has a documented semantic wart around hand-built historical no-op adjusts, and its process is more self-congratulatory with less independent edge probing despite assigning itself perfect completeness/evidence scores. A has the better final-product confidence and the better harness-process evidence."
+}

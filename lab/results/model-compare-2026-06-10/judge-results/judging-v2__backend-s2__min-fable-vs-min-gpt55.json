@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:13:05.863Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T04-14-01-426Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-24-52-084Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 4
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs ship a working built-ins-only notes API: all four endpoints, JSON errors with 404/400, file persistence proven by a restart test, no npm deps, and both pass the tests + probe-http-lifecycle objective checks. The separation is in test granularity and, especially, evaluation evidence. Run A ships 8 focused node:test cases (create/list/fetch/delete/restart-persistence/404/400/unknown-route) plus an explicit baseline fixture test (#9 'greenfield fixture baseline stays green') that stays green — directly satisfying the 'fixture baseline test must remain green' critical requirement. Run B collapses everything into just 2 coarse bundled tests and its progress.md states it 'Replaced the baseline smoke test,' so the named fixture baseline is no longer separately visible (probe still passes, so not a hard regression, but it weakens implementationQuality and correctness signal). On evaluationTrustworthiness Run A is markedly stronger: its evaluator independently reproduced the full live HTTP lifecycle via curl (5 frozen evidence files), performed a real process kill+restart to prove persistence, verified default port 3000, and discovered+root-caused a genuine low-severity bug (oversized body → ECONNRESET instead of intended 413, with file:line root cause) — strong, reproducible, honest. Run B's evaluator only re-ran `npm test` once and saved a single log (confidence medium, evidence adequate) — trustworthy but thin, no independent HTTP probing. On harness process the two are roughly even: Run B's generator log is admirably transparent about real dev failures it fixed (spawn file-URL bug, SIGTERM cleanup hang), while Run A's generator crashed once and its second session largely 're-verified' a pre-existing implementation (less authentic generation signal) but its evaluation process is far more rigorous. Net: Run A has the better-tested, better-structured final product and substantially stronger, more reproducible API-behavior evidence. No critical regressions in either run."
+}

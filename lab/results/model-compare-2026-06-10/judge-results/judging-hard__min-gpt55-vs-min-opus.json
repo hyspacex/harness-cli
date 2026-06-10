@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-hard-ledger-undo",
+  "judgedAt": "2026-06-10T14:03:12.972Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T13-52-29-219Z-you-are-working-in-an-existing-event-sourced-inv",
+    "B": "2026-06-10T13-31-04-430Z-you-are-working-in-an-existing-event-sourced-inv"
+  },
+  "evaluationSpecHash": "8ea270da696294644ad2ec0b4c754436827d0669a1a886666dd7aa7485f5c0e1",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "rootCauseAnalysis": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "integrationCompatibility": {
+      "A": 4,
+      "B": 5
+    },
+    "verificationDepth": {
+      "A": 3,
+      "B": 5
+    },
+    "judgmentAndDocumentation": {
+      "A": 4,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs pass all objective checks (tests, probe-golden-replay, probe-removed-stays-removed, probe-undo-append-only) in a single sprint with no repair rounds, no added dependencies, and marker-event-based append-only undo, so neither violates a critical requirement. Run B is stronger on every dimension. Root cause: B gives precise code-level mechanisms with evidence — string compare on seq producing lexical order 1,10,11,12,2... verified against the golden log, and the `items[name] || {qty:0}` fallback resurrecting removed gear at seq 4→5 — while A names the same mechanisms correctly but tersely, without code references or golden-log demonstration. Correctness/coverage: B's 17 tests explicitly cover undo of add/adjust/remove, consecutive undos, nothing-to-undo, exhaustion, and marker-log replayability; A's 11 tests cover the core but lack named tests for nothing-to-undo and undo-of-remove restoring prior quantity (progress.md claims exhaustion coverage without test-name evidence). Integration: B proves the golden file is byte-identical (md5 before/after, line count) and that marker logs remain replayable; A only saved a semantic-equality comparison with no file-unchanged evidence. Verification depth: B saved CLI behavior transcripts and the evaluator independently reproduced every command (high confidence / strong evidence), even surfacing a genuine low-severity semantic edge case in undo targeting; A's evidence is npm-test.log plus a semantic compare, self-rated medium/adequate. Documentation: both wrote README-UNDO.md with a coherent consecutive-undo choice, but B's linear peel-back semantics is more thoroughly tested and its boundary behavior explicitly analyzed. Minor demerit for B: its evaluator created and then removed a stray ledger.jsonl in the workspace — hygiene noise, not a regression."
+}

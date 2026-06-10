@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:12:18.336Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T04-02-49-926Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-52-15-449Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 5,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 5,
+      "B": 5
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy the locked critical requirements: objective checks pass, the real bin/task.mjs CLI is exercised, TASKS_FILE isolation is verified, baseline tests remain green, and command/error behavior is evidenced. Run A has especially strong trust evidence: full TAP output with named cases, manual smoke, stream-separation checks, frozen manifests, and explicit default-path verification. Run B appears to have a slightly richer final product and test surface, with 18 CLI child-process tests, explicit stdout-empty evidence for error paths, corrupt and non-array store handling, default and override path checks, and an atomic-ish save note. Its npm-test artifact is thinner than A's because it only preserves the TAP summary, so A scores higher on evaluationTrustworthiness. Harness process is similar for both: useful but generic harness-authored contracts, no repair loop after successful generation, and good progress/handoff artifacts. Overall B edges out on final product/test breadth while A has better audit evidence."
+}
