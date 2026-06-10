@@ -33,7 +33,7 @@ Project profiles can be added under `profiles` in `harness.config.json`. Sparse 
 Matrix planning runs real eval cases through one or more profiles. It defaults to dry mode and writes a reproducible plan:
 
 ```bash
-npm run harness -- eval matrix --case examples-adaptive-dashboard-filtering --profiles adaptive
+npm run harness -- lab matrix --case examples-adaptive-dashboard-filtering --profiles adaptive
 ```
 
 Adaptive selection is evidence-first: when the run root holds enough history (at least two profiles with two or more finished runs, matching the case category first and any category second), it recommends the cheapest profile whose measured completion rate is within tolerance of the best, plus the best. Until that history exists it falls back to the category heuristic:
@@ -51,7 +51,7 @@ npm run harness -- profiles --recommend "Build a small CRM dashboard"
 Execute the plan when ready:
 
 ```bash
-npm run harness -- eval matrix --case examples-adaptive-dashboard-filtering --profiles adaptive --execute true
+npm run harness -- lab matrix --case examples-adaptive-dashboard-filtering --profiles adaptive --execute true
 ```
 
 Execution copies fixture workspaces by default, writes per-profile harness runs under the matrix output directory, emits eval packets, writes `matrix-result.md`, and creates locked-rubric pairwise comparison artifacts for packetized profile runs, including failed runs. Without `--judge-provider`, those comparisons are dry-mode prompts and inconclusive `judge-result.json` files ready for review. Add `--judge-provider claude-sdk` or `--judge-provider codex` to ask a model judge to score the profile pairs.
@@ -61,7 +61,7 @@ For release decisions, add `--objective-checks true` and inspect `matrix-result.
 Regenerate packets and reports from an existing matrix directory without rerunning agents:
 
 ```bash
-npm run harness -- eval matrix report --from /tmp/harness-cli-live-matrix-fast
+npm run harness -- lab matrix report --from /tmp/harness-cli-live-matrix-fast
 ```
 
 ## Ceremony Ladder
@@ -76,12 +76,12 @@ Verification gates — independent verdicts, frozen evidence manifests, dev-smok
 
 ## Benchmark Suite and Ceremony ROI
 
-`evals/benchmark-suite.json` fixes 8 app prompts (frontend, backend, CLI) against the three ladder rungs so ceremony cost can be measured instead of assumed:
+`lab/suites/ceremony-ladder-v1.json` fixes 8 app prompts (frontend, backend, CLI) against the three ladder rungs so ceremony cost can be measured instead of assumed:
 
 ```bash
-npm run harness -- eval matrix --suite                # dry-run plan (24 runs)
-npm run harness -- eval matrix --suite --execute true # execute and freeze under benchmarks/frozen/
-npm run harness -- eval roi                           # ceremony ROI report from accumulated run history
+npm run harness -- lab matrix --suite                # dry-run plan (24 runs)
+npm run harness -- lab matrix --suite --execute true # execute and freeze under lab/results/frozen/
+npm run harness -- eval roi                          # ceremony ROI report from accumulated run history
 ```
 
 The ROI report groups run history by generator provider × ceremony level and reports completion rate, first-round pass rate, average repair rounds, average tasks per run (cost proxy), and negotiation approval rate — then states, per provider, whether the extra ceremony is buying enough pass-rate to justify its cost. Kill the rungs the data says are dead.

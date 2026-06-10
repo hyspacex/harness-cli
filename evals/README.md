@@ -1,16 +1,18 @@
 # Harness Eval Cases
 
-This directory contains lightweight meta-eval cases for comparing two complete harness runs. Use them when changing harness behavior and you need a stable signal on whether the candidate run is better or worse than a baseline run.
+This directory contains lightweight meta-eval cases for comparing two complete harness runs. Use them when changing harness behavior and you need a stable signal on whether the candidate run is better or worse than a baseline run. Benchmark `bench-*` cases live in `lab/cases/`; case discovery scans both directories (lab wins on id collision). See [lab/README.md](../lab/README.md) for the characterization instrument.
 
 ## Commands
 
 ```bash
-npm run harness -- eval list
-npm run harness -- eval packet .harness/runs/<run-id> --case examples-adaptive-dashboard-filtering --markdown
-npm run harness -- eval packet .harness/runs/<run-id> --case examples-adaptive-dashboard-filtering --objective-checks true
-npm run harness -- eval compare --case examples-adaptive-dashboard-filtering --a <baseline-run-dir> --b <candidate-run-dir>
-npm run harness -- eval compare --case examples-adaptive-dashboard-filtering --a <baseline-run-dir> --b <candidate-run-dir> --judge-provider claude-sdk --objective-checks true
+npm run harness -- lab list
+npm run harness -- lab packet .harness/runs/<run-id> --case examples-adaptive-dashboard-filtering --markdown
+npm run harness -- lab packet .harness/runs/<run-id> --case examples-adaptive-dashboard-filtering --objective-checks true
+npm run harness -- lab compare --case examples-adaptive-dashboard-filtering --a <baseline-run-dir> --b <candidate-run-dir>
+npm run harness -- lab compare --case examples-adaptive-dashboard-filtering --a <baseline-run-dir> --b <candidate-run-dir> --judge-provider claude-sdk --objective-checks true
 ```
+
+(The old `harness eval <list|packet|compare|matrix>` forms are deprecated aliases for `harness lab <...>`.)
 
 `compare` writes `packet-a.json`, `packet-a.md`, `packet-b.json`, `packet-b.md`, `judge-prompt.md`, and `judge-result.json`. If `--judge-provider` is omitted, it runs in dry mode and prepares the prompt/artifacts without calling an LLM judge.
 

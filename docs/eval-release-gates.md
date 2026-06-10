@@ -39,7 +39,7 @@ A harness feature branch is good enough to ship when all of these are true:
 Use the CLI case for a cheap backend/eval smoke:
 
 ```bash
-npm run harness -- eval matrix \
+npm run harness -- lab matrix \
   --case harness-cli-error-ergonomics \
   --profiles balanced \
   --execute false \
@@ -51,7 +51,7 @@ npm run harness -- eval matrix \
 For a real release signal, run at least two profiles and include objective checks:
 
 ```bash
-npm run harness -- eval matrix \
+npm run harness -- lab matrix \
   --case harness-cli-error-ergonomics \
   --profiles balanced,codex-only \
   --execute true \

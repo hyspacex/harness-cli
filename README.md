@@ -36,7 +36,7 @@ Don't guess which rung a model needs — measure it:
 
 ```bash
 # Run the fixed benchmark suite across the ladder (8 cases x 3 rungs)
-npm run harness -- eval matrix --suite --execute true
+npm run harness -- lab matrix --suite --execute true
 
 # Aggregate run history: does ceremony pay for itself per provider?
 npm run harness -- eval roi
@@ -181,7 +181,7 @@ Uses OpenAI's `codex app-server` via JSON-RPC. The harness manages auth, thread 
 
 In this example, `researcher` and `evaluator` use Claude while `planner` and `generator` route to Codex. The harness records per-role/provider performance metrics so you can compare routing strategies empirically.
 
-When multiple providers are used, the harness freezes benchmark artifacts under `benchmarks/frozen/` so later comparisons use stable inputs.
+When multiple providers are used, the harness freezes benchmark artifacts under the run's `benchmarks/frozen/` directory so later comparisons use stable inputs.
 
 ## Configuration
 
@@ -312,14 +312,22 @@ The harness is not locked to web apps. The researcher generates project-specific
 
 Adjust `smoke.*` commands and evaluator tooling to match your project. See [docs/generalization.md](docs/generalization.md) for details.
 
-## Eval workbench
+## The Lab
 
-Harness evals let you compare complete runs against fixed cases with locked rubrics, deterministic objective checks, and packetized artifacts. Matrix mode can run the same case across multiple execution profiles, including the adaptive selector that prefers profiles backed by run-history evidence and falls back to category heuristics.
+The repo has two layers with a one-way dependency: **Core** (`src/core/`, everything above — the product) and the **Lab** (`src/lab/`, the model/provider characterization instrument). The lab compares complete runs against fixed cases with locked rubrics, blinded pairwise judges, deterministic behavior probes, and fixed benchmark suites:
 
-The fixed benchmark suite (`evals/benchmark-suite.json`) runs 8 app prompts — frontend, backend, and CLI — across the ceremony ladder (`full-harness`, `flat`, `minimal`) and freezes results under `benchmarks/frozen/` for cross-run comparison. `harness eval roi` turns accumulated run history into a ceremony ROI report.
+```bash
+npm run harness -- lab list
+npm run harness -- lab compare --case <id> --a <runDir> --b <runDir> --blind-judge true --judge-provider claude-sdk
+npm run harness -- lab matrix --suite --execute true   # ceremony-ladder benchmark grid
+```
+
+The fixed benchmark suite (`lab/suites/ceremony-ladder-v1.json`) runs 8 app prompts — frontend, backend, and CLI — across the ceremony ladder (`full-harness`, `flat`, `minimal`) and freezes results under `lab/results/frozen/`. The lab uses Core as its test rig; Core never depends on it. Lab evidence informs profile defaults, real runs feed `eval roi` and `profiles --recommend`, and new questions become new lab cases.
 
 Useful docs:
 
+- [lab/README.md](lab/README.md) — lab commands, layout, and methodology lessons from cross-model benchmarks.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the core/lab split and the boundary rule.
 - [Adaptive agent workbench](docs/adaptive-workbench.md) explains profiles, adaptive profile selection, and matrix execution.
 - [Harness evals](docs/harness-evals.md) explains eval packets, pairwise judging, objective checks, and matrix reports.
 - [Eval release gates](docs/eval-release-gates.md) defines the current "good enough to ship" checklist.
@@ -332,7 +340,8 @@ harness profiles [--config path] [--recommend "p"]   List profiles / evidence-ba
 harness run      "prompt" [flags]                    Start a new run
 harness resume   <run-id> [--config path]            Resume interrupted run
 harness status   [run-id] [--config path]            Inspect runs
-harness eval     <list|packet|compare|matrix|roi>    Packets, comparisons, benchmark suite, ROI report
+harness lab      <list|packet|compare|matrix>        Model/provider characterization (packets, blinded comparisons, benchmark suites)
+harness eval     roi                                 Ceremony ROI report from run history (old eval subcommands are deprecated aliases for lab)
 
 Flags:
   --config <path>                Config file (default: ./harness.config.json)

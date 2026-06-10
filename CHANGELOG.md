@@ -24,6 +24,9 @@
 
 ### Changed
 
+- Restructured the repo into two layers with a one-way dependency: `src/core/` (the product harness, including self-measurement: run history, profile recommendation, `eval roi`) and `src/lab/` (the model/provider characterization instrument: cases, packets, blinded judges, objective checks, matrix). `src/cli.ts` + `src/cli-flags.ts` stay at the root as the thin CLI layer. `test/boundary.test.mjs` enforces that core never imports lab.
+- Moved the eval workbench CLI to a `harness lab` namespace: `harness lab <list|packet|compare|matrix>`. The old `harness eval <list|packet|compare|matrix>` forms remain as deprecated aliases that print a stderr notice; `harness eval roi` stays as product self-measurement.
+- Moved lab assets: benchmark cases `evals/cases/bench-*.json` → `lab/cases/`, fixtures `evals/fixtures/{greenfield,eventlog}` → `lab/fixtures/`, benchmark suite `evals/benchmark-suite.json` → `lab/suites/ceremony-ladder-v1.json`, cross-model findings `docs/benchmark-findings-2026-06.md` → `lab/results/`, frozen comparison evidence `benchmarks/frozen/model-compare-2026-06-10/` → `lab/results/model-compare-2026-06-10/`. Suite freeze output now defaults to `lab/results/frozen/` instead of `benchmarks/frozen/` (per-run multi-provider freezing under each run's `benchmarks/frozen/` is unchanged). Product-facing example cases stay in `evals/cases/`; case discovery scans `lab/cases/` and `evals/cases/` with lab precedence on id collision.
 - Reframed the README: the harness's premise is now "minimal ceremony, maximal verification, chosen by evidence" instead of bounded roles as a workaround for models losing the thread.
 
 ## [0.4.0] - 2026-05-09

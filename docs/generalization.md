@@ -2,7 +2,7 @@
 
 The orchestration engine is already mostly domain-agnostic:
 
-- the sprint loop in `src/harness.ts`
+- the sprint loop in `src/core/harness.ts`
 - durable run state and resume support
 - role-routed provider registry (`claude-sdk`, `codex`)
 - researcher-generated evaluation criteria in `plan/eval-criteria.json`
