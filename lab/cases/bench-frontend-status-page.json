@@ -4,7 +4,7 @@
   "title": "Frontend: dependency-free service status page",
   "category": "frontend",
   "prompt": "Build a service status dashboard as a static page (index.html plus vanilla ES modules, no npm dependencies and no build step). Render a list of services from a JSON data module with name, status (operational | degraded | down), and lastChecked. Show a summary banner that is green only when every service is operational, support filtering by status, and sort outages first. Put the summary/filter/sort logic in a pure ES module separate from DOM code and cover it with node --test unit tests, including the empty-services and all-down edge cases.",
-  "workspaceFixture": "evals/fixtures/greenfield",
+  "workspaceFixture": "lab/fixtures/greenfield",
   "harnessConfig": {
     "maxSprints": 3,
     "maxRepairRounds": 2,

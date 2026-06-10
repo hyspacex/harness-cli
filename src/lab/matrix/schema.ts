@@ -37,7 +37,8 @@ export interface MatrixPlanFile {
   builtAt: string;
   mode: string;
   profileSelection: string;
-  casesDir: string;
+  /** Explicit cases dir, or null when the plan used the default lab/cases + evals/cases scan. */
+  casesDir: string | null;
   /** Set when the plan came from a benchmark suite manifest. */
   suiteId?: string | null;
   runs: MatrixRunPlan[];

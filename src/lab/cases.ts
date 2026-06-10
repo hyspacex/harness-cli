@@ -7,7 +7,8 @@ import {
   readJson,
 } from '../core/utils.js';
 
-const DEFAULT_CASES_DIR = 'evals/cases';
+/** Lab-owned cases take precedence over product-facing example cases on id collision. */
+const DEFAULT_CASES_DIRS = ['lab/cases', 'evals/cases'];
 
 export interface EvalObjectiveCheck {
   id?: string;
@@ -67,31 +68,41 @@ export interface BenchmarkSuite {
   profiles: string[];
 }
 
-export async function listEvalCases(casesDir = DEFAULT_CASES_DIR): Promise<EvalCaseSummary[]> {
-  const absoluteCasesDir = path.resolve(casesDir);
-  if (!(await fileExists(absoluteCasesDir))) {
-    return [];
-  }
+export async function listEvalCases(casesDir?: string | null): Promise<EvalCaseSummary[]> {
+  const summariesById = new Map<string, EvalCaseSummary>();
+  for (const dir of resolveCasesDirs(casesDir)) {
+    const absoluteCasesDir = path.resolve(dir);
+    if (!(await fileExists(absoluteCasesDir))) {
+      continue;
+    }
 
-  const files = (await listFilesRecursive(absoluteCasesDir)).filter((filePath) => filePath.endsWith('.json'));
-  const summaries: EvalCaseSummary[] = [];
-  for (const filePath of files) {
-    try {
-      const evalCase = await readEvalCase(filePath);
-      summaries.push({
-        id: evalCase.id,
-        title: evalCase.title || evalCase.id,
-        category: evalCase.category,
-        path: filePath,
-      });
-    } catch {
-      // Ignore malformed drafts in the case directory; direct reads still report errors.
+    const files = (await listFilesRecursive(absoluteCasesDir)).filter((filePath) => filePath.endsWith('.json'));
+    for (const filePath of files) {
+      try {
+        const evalCase = await readEvalCase(filePath);
+        if (summariesById.has(evalCase.id)) {
+          continue;
+        }
+        summariesById.set(evalCase.id, {
+          id: evalCase.id,
+          title: evalCase.title || evalCase.id,
+          category: evalCase.category,
+          path: filePath,
+        });
+      } catch {
+        // Ignore malformed drafts in the case directory; direct reads still report errors.
+      }
     }
   }
-  return summaries.sort((a, b) => a.id.localeCompare(b.id));
+  return [...summariesById.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export const DEFAULT_BENCHMARK_SUITE_PATH = 'evals/benchmark-suite.json';
+/** An explicit cases dir scans only that dir; the default scans lab/cases then evals/cases. */
+function resolveCasesDirs(casesDir?: string | null): string[] {
+  return casesDir ? [casesDir] : DEFAULT_CASES_DIRS;
+}
+
+export const DEFAULT_BENCHMARK_SUITE_PATH = 'lab/suites/ceremony-ladder-v1.json';
 
 export async function readBenchmarkSuite(filePath = DEFAULT_BENCHMARK_SUITE_PATH): Promise<BenchmarkSuite> {
   const absolutePath = path.resolve(filePath);
@@ -114,15 +125,17 @@ export async function readBenchmarkSuite(filePath = DEFAULT_BENCHMARK_SUITE_PATH
   return value as unknown as BenchmarkSuite;
 }
 
-export async function findEvalCase(ref: string, casesDir = DEFAULT_CASES_DIR): Promise<HarnessEvalCase> {
+export async function findEvalCase(ref: string, casesDir?: string | null): Promise<HarnessEvalCase> {
   const directPath = path.resolve(ref);
   if (await fileExists(directPath)) {
     return readEvalCase(directPath);
   }
 
-  const namedPath = path.resolve(casesDir, ref.endsWith('.json') ? ref : `${ref}.json`);
-  if (await fileExists(namedPath)) {
-    return readEvalCase(namedPath);
+  for (const dir of resolveCasesDirs(casesDir)) {
+    const namedPath = path.resolve(dir, ref.endsWith('.json') ? ref : `${ref}.json`);
+    if (await fileExists(namedPath)) {
+      return readEvalCase(namedPath);
+    }
   }
 
   throw new Error(`Eval case not found: ${ref}`);

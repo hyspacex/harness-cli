@@ -33,7 +33,7 @@ export async function prepareMatrixRuns(
   flags: Record<string, string>,
   positionals: string[],
 ): Promise<PreparedMatrixRuns> {
-  const casesDir = flags.cases || 'evals/cases';
+  const casesDir = flags.cases || null;
   const suite = flags.suite
     ? await readBenchmarkSuite(flags.suite === 'true' ? DEFAULT_BENCHMARK_SUITE_PATH : flags.suite)
     : null;
@@ -122,7 +122,7 @@ export async function prepareMatrixRuns(
     builtAt,
     mode: execute ? 'execute' : 'dry-run',
     profileSelection: selection,
-    casesDir: path.resolve(casesDir),
+    casesDir: casesDir ? path.resolve(casesDir) : null,
     suiteId: suite?.id || null,
     runs: plannedRuns.map((run) => run.plan),
   };
@@ -163,11 +163,11 @@ async function resolveProfileSelection(
 async function resolveMatrixCases(
   flags: Record<string, string>,
   positionals: string[],
-  casesDir: string,
+  casesDir: string | null,
 ): Promise<HarnessEvalCase[]> {
   const rawCase = flags.case || positionals[1];
   if (!rawCase) {
-    throw new Error('Provide an eval case: harness eval matrix --case <id|path|all>');
+    throw new Error('Provide an eval case: harness lab matrix --case <id|path|all>');
   }
 
   if (rawCase === 'all') {
@@ -242,7 +242,7 @@ function renderMatrixRunCommand(
   flags: Record<string, string>,
 ): string {
   const pieces = [
-    'npm run harness -- eval matrix',
+    'npm run harness -- lab matrix',
     '--case',
     quoteCliValue(evalCase.id),
     '--profiles',
@@ -267,7 +267,7 @@ function renderMatrixPlanMarkdown(plan: MatrixPlanFile): string {
   lines.push(`Built at: ${plan.builtAt}`);
   lines.push(`Mode: ${plan.mode}`);
   lines.push(`Profile selection: ${plan.profileSelection}`);
-  lines.push(`Cases directory: ${plan.casesDir}`);
+  lines.push(`Cases directory: ${plan.casesDir || '(default: lab/cases, evals/cases)'}`);
   lines.push('');
   lines.push('## Runs');
   lines.push('');

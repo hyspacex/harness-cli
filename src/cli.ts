@@ -66,6 +66,10 @@ async function main(): Promise<void> {
       await handleEvalCommand(flags, positionals);
       return;
     }
+    case 'lab': {
+      await handleLabCommand(flags, positionals);
+      return;
+    }
     case 'help':
     case undefined:
       printHelp();
@@ -75,14 +79,47 @@ async function main(): Promise<void> {
   }
 }
 
+const LAB_SUBCOMMANDS = new Set(['list', 'packet', 'compare', 'matrix']);
+
+async function handleLabCommand(flags: Record<string, string>, positionals: string[]): Promise<void> {
+  const subcommand = positionals[0] || 'help';
+  if (LAB_SUBCOMMANDS.has(subcommand)) {
+    await dispatchLabSubcommand(subcommand, flags, positionals);
+    return;
+  }
+  printLabHelp();
+}
+
 async function handleEvalCommand(flags: Record<string, string>, positionals: string[]): Promise<void> {
   const subcommand = positionals[0] || 'help';
 
+  if (LAB_SUBCOMMANDS.has(subcommand)) {
+    console.error(`harness eval ${subcommand} is deprecated; use harness lab ${subcommand}`);
+    await dispatchLabSubcommand(subcommand, flags, positionals);
+    return;
+  }
+
+  switch (subcommand) {
+    case 'roi': {
+      await writeCeremonyRoiReport(flags);
+      return;
+    }
+    case 'help':
+    default:
+      printEvalHelp();
+  }
+}
+
+async function dispatchLabSubcommand(
+  subcommand: string,
+  flags: Record<string, string>,
+  positionals: string[],
+): Promise<void> {
   switch (subcommand) {
     case 'list': {
-      const cases = await listEvalCases(flags.cases || 'evals/cases');
+      const cases = await listEvalCases(flags.cases || null);
       if (cases.length === 0) {
-        console.log(`No eval cases found under ${flags.cases || 'evals/cases'}`);
+        console.log(`No eval cases found under ${flags.cases || 'lab/cases or evals/cases'}`);
         return;
       }
       for (const evalCase of cases) {
@@ -93,10 +130,10 @@ async function handleEvalCommand(flags: Record<string, string>, positionals: str
     case 'packet': {
       const runDir = positionals[1];
       if (!runDir) {
-        throw new Error('Provide a run directory. Example: harness eval packet .harness/runs/<run-id> --case my-case');
+        throw new Error('Provide a run directory. Example: harness lab packet .harness/runs/<run-id> --case my-case');
       }
 
-      const evalCase = flags.case ? await findEvalCase(flags.case, flags.cases || 'evals/cases') : null;
+      const evalCase = flags.case ? await findEvalCase(flags.case, flags.cases || null) : null;
       const packet = await buildEvalRunPacket({
         runDir,
         evalCase,
@@ -122,13 +159,8 @@ async function handleEvalCommand(flags: Record<string, string>, positionals: str
       await runEvalMatrix(flags, positionals);
       return;
     }
-    case 'roi': {
-      await writeCeremonyRoiReport(flags);
-      return;
-    }
-    case 'help':
     default:
-      printEvalHelp();
+      throw new Error(`Unknown lab subcommand: ${subcommand}`);
   }
 }
 
@@ -209,10 +241,10 @@ async function compareEvalRuns(flags: Record<string, string>, positionals: strin
     throw new Error('Provide an eval case with --case <id|path>.');
   }
   if (!runA || !runB) {
-    throw new Error('Provide both runs: harness eval compare --case <id> --a <runDir> --b <runDir>');
+    throw new Error('Provide both runs: harness lab compare --case <id> --a <runDir> --b <runDir>');
   }
 
-  const evalCase = await findEvalCase(caseRef, flags.cases || 'evals/cases');
+  const evalCase = await findEvalCase(caseRef, flags.cases || null);
   const packetA = await buildEvalRunPacket({
     runDir: runA,
     evalCase,
@@ -449,7 +481,8 @@ Commands:
   harness run "Build a ..." [--config file] [--profile name|adaptive] [--provider claude-sdk|codex] [--workspace path]
   harness resume <runId> [--config file] [--profile name]
   harness status [runId] [--config file] [--profile name]
-  harness eval <list|packet|compare|matrix|roi> [flags]
+  harness lab <list|packet|compare|matrix> [flags]   Model/provider characterization instrument
+  harness eval <roi> [flags]                         Product self-measurement (old eval subcommands moved to lab)
 
 Flags:
   --config <path>       Config file path (default: ./harness.config.json)
@@ -475,23 +508,40 @@ Ceremony ladder:
 function printEvalHelp(): void {
   console.log(`harness eval
 
+Product self-measurement of the harness itself.
+
 Commands:
-  harness eval list [--cases evals/cases]
-  harness eval packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
-  harness eval compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
-  harness eval matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
-  harness eval matrix --suite [evals/benchmark-suite.json] [--out dir] [--execute true]
-  harness eval matrix report --from <matrixOutDir> [--judge-provider claude-sdk|codex]
   harness eval roi [--run-root path] [--out dir]
 
 Notes:
+  roi aggregates run history into a ceremony ROI report: per provider, does role/negotiation ceremony pay for itself?
+  The old eval subcommands (list, packet, compare, matrix) moved to "harness lab" and remain as deprecated aliases here.
+`);
+}
+
+function printLabHelp(): void {
+  console.log(`harness lab
+
+The lab is the model/provider characterization instrument: fixed eval cases,
+locked judge rubrics, and benchmark suites for measuring how much harness
+ceremony each model actually needs.
+
+Commands:
+  harness lab list [--cases dir]
+  harness lab packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
+  harness lab compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
+  harness lab matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
+  harness lab matrix --suite [lab/suites/ceremony-ladder-v1.json] [--out dir] [--execute true]
+  harness lab matrix report --from <matrixOutDir> [--judge-provider claude-sdk|codex]
+
+Notes:
+  list scans lab/cases/ and evals/cases/ by default (lab/cases wins on id collision); --cases scans one dir only.
   compare writes packet-a.json, packet-b.json, judge-prompt.md, and judge-result.json.
   If --judge-provider is omitted, compare runs in dry mode and only prepares the judge prompt.
   matrix defaults to dry mode and writes matrix-plan.json plus matrix-plan.md.
   When executed, matrix writes per-profile packets, matrix-result.md, and pairwise comparison prompts/results.
   matrix report rebuilds packets, matrix-result.md, and comparisons from an existing matrix-plan.json.
-  matrix --suite runs the fixed benchmark grid (cases x ceremony-ladder profiles) and freezes results under benchmarks/frozen/.
-  roi aggregates run history into a ceremony ROI report: per provider, does role/negotiation ceremony pay for itself?
+  matrix --suite runs the fixed benchmark grid (cases x ceremony-ladder profiles) and freezes results under lab/results/frozen/.
   Add --objective-checks true to run case-defined commands while building packets.
   Add --blind-judge true to redact profile/provider/model identifiers from judge prompts.
   Add --judge-model <model> to override the judge's model (e.g. a non-participant model for fairness).

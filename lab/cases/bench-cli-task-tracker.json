@@ -4,7 +4,7 @@
   "title": "CLI: task tracker with JSON storage",
   "category": "cli",
   "prompt": "Build a command-line task tracker as a Node.js ESM executable (no npm dependencies). The executable must live at bin/task.mjs so `node bin/task.mjs <command>` works from the workspace root. Support `task add \"title\"`, `task list`, `task done <id>`, and `task remove <id>`, storing tasks in a JSON file whose path can be overridden with the TASKS_FILE environment variable. Invalid commands, missing arguments, and unknown ids must print a clear error to stderr and exit non-zero, while successful commands exit zero with readable output (list output must include each task's title). Cover every command and every error path with node --test tests that invoke the CLI as a child process against a temp TASKS_FILE.",
-  "workspaceFixture": "evals/fixtures/greenfield",
+  "workspaceFixture": "lab/fixtures/greenfield",
   "harnessConfig": {
     "maxSprints": 3,
     "maxRepairRounds": 2,

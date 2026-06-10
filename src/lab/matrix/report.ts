@@ -33,7 +33,7 @@ export async function reportEvalMatrix(
 ): Promise<void> {
   const outDirInput = flags.from || positionals[2] || flags.out;
   if (!outDirInput) {
-    throw new Error('Provide a matrix output directory: harness eval matrix report --from <dir>');
+    throw new Error('Provide a matrix output directory: harness lab matrix report --from <dir>');
   }
   const outDir = path.resolve(outDirInput);
 
@@ -46,7 +46,7 @@ export async function reportEvalMatrix(
   const results: MatrixRunResult[] = [];
   const packetizedRuns: PacketizedMatrixRun[] = [];
   for (const planRun of plan.runs) {
-    const evalCase = await findEvalCase(planRun.caseId, flags.cases || plan.casesDir || 'evals/cases');
+    const evalCase = await findEvalCase(planRun.caseId, flags.cases || plan.casesDir || null);
     const run = await findLatestMatrixRun(planRun.runRoot);
     if (!run) {
       results.push({
@@ -128,14 +128,14 @@ export async function writeMatrixResult(outDir: string, result: MatrixResultFile
   await freezeSuiteResult(outDir, result);
 }
 
-/** Benchmark-suite matrix results are additionally frozen under benchmarks/frozen/ for cross-run comparison. */
+/** Benchmark-suite matrix results are additionally frozen under lab/results/frozen/ for cross-run comparison. */
 async function freezeSuiteResult(outDir: string, result: MatrixResultFile): Promise<void> {
   const plan = await readJson<MatrixPlanFile | null>(path.join(outDir, 'matrix-plan.json'), null);
   if (!plan?.suiteId) {
     return;
   }
 
-  const frozenDir = path.resolve('benchmarks', 'frozen', slugify(plan.suiteId), slugify(plan.builtAt));
+  const frozenDir = path.resolve('lab', 'results', 'frozen', slugify(plan.suiteId), slugify(plan.builtAt));
   await ensureDir(frozenDir);
   await writeJson(path.join(frozenDir, 'matrix-plan.json'), plan);
   await writeJson(path.join(frozenDir, 'matrix-result.json'), result);

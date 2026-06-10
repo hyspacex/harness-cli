@@ -4,7 +4,7 @@
   "title": "Backend: notes REST API on Node built-ins",
   "category": "backend",
   "prompt": "Build a small REST API for notes using only Node.js built-in modules (no npm dependencies). The server entry point must be src/server.mjs, started with `node src/server.mjs`, listening on the PORT environment variable (default 3000). Support POST /notes (create — must return HTTP 201 with the created note as JSON including its `id`), GET /notes (list), GET /notes/:id (fetch one), and DELETE /notes/:id. Persist notes to a JSON file so data survives a server restart. Return JSON errors with correct status codes: 404 for missing notes and 400 for invalid request bodies. Cover create, list, fetch, delete, persistence-across-restart, and the error paths with node --test tests that start the server on an ephemeral port.",
-  "workspaceFixture": "evals/fixtures/greenfield",
+  "workspaceFixture": "lab/fixtures/greenfield",
   "harnessConfig": {
     "maxSprints": 3,
     "maxRepairRounds": 2,

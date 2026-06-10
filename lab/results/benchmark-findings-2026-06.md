@@ -1,7 +1,7 @@
 # Cross-Model Benchmark Findings — June 2026
 
 Models: Claude Opus 4.8, Claude Fable 5, GPT-5.5 (Codex, effort `high` unless noted).
-Raw evidence: `benchmarks/frozen/model-compare-2026-06-10/` (deterministic aggregate,
+Raw evidence: `lab/results/model-compare-2026-06-10/` (deterministic aggregate,
 28 blinded judge results, matrix results, ceremony ROI report).
 
 ## Setup

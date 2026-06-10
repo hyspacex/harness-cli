@@ -70,7 +70,7 @@ test('buildPairwiseJudgePrompt blind option redacts both packets', () => {
 
 test('objective checks run in the executed workspace, not the case fixture', async () => {
   const { resolveObjectiveWorkspace } = await import('../dist/lab/objective-checks.js');
-  const evalCase = { workspaceFixture: 'evals/fixtures/greenfield' };
+  const evalCase = { workspaceFixture: 'lab/fixtures/greenfield' };
 
   assert.match(
     resolveObjectiveWorkspace(evalCase, null, '/tmp/run/workspace'),
@@ -82,6 +82,6 @@ test('objective checks run in the executed workspace, not the case fixture', asy
   );
   assert.match(
     resolveObjectiveWorkspace(evalCase, null, ''),
-    /evals\/fixtures\/greenfield$/,
+    /lab\/fixtures\/greenfield$/,
   );
 });

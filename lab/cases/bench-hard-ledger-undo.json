@@ -4,7 +4,7 @@
   "title": "Hard: event-sourced ledger — root-cause two bugs, add compensating undo",
   "category": "backend",
   "prompt": "You are working in an existing event-sourced inventory ledger (see README.md): state is derived only by replaying an append-only JSONL event log, and the log must never be rewritten, reordered, or truncated. Users report two long-standing bugs you must root-cause and fix with regression tests: (1) ledgers that grow past a handful of events sometimes produce wrong totals after replay; (2) removed items sometimes reappear with wrong quantities. The repository's golden-v1.jsonl is a real affected production ledger: after your fixes, replaying it must produce exactly expected-state-v1.json, without modifying the file. Required semantics: during replay of historical logs an adjust event for a missing item is skipped as a no-op, but the adjust CLI command must refuse (stderr + non-zero exit) to append an adjustment for an item that does not exist in current state. Then add an `undo` command: it reverts the most recent state-changing command by appending compensating or marker event(s) — never by rewriting the log; `history` must still show all original events; `undo` with nothing to undo errors with non-zero exit. Decide the semantics of consecutive undos yourself, document your choice in README-UNDO.md, and cover it with tests. Do not change the state JSON output shape, the existing commands' interfaces, or the v1 log format's replayability. No npm dependencies; keep all existing tests green.",
-  "workspaceFixture": "evals/fixtures/eventlog",
+  "workspaceFixture": "lab/fixtures/eventlog",
   "harnessConfig": {
     "maxSprints": 3,
     "maxRepairRounds": 2,
