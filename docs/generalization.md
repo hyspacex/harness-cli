@@ -68,7 +68,7 @@ The harness now keeps more of the evaluation surface in structured, durable arti
 - contracts are written as both `contracts/contract-XX.md` and `contracts/contract-XX.json`
 - evals are written as both `evals/eval-XX-rYY.md` and `evals/eval-XX-rYY.json`
 - evaluator evidence is frozen under `evals/evidence-frozen/` before the generator reads it
-- mixed-provider runs freeze benchmark snapshots under `benchmarks/frozen/`
+- mixed-provider runs freeze per-run benchmark snapshots under each run directory's `benchmarks/frozen/`; benchmark suite results are frozen under `lab/results/frozen/`
 
 That matters for non-frontend work too. For a CLI or API project, "truth" may be logs, HTTP responses, fixture outputs, or schema diffs instead of screenshots, but the harness now treats those as benchmark artifacts rather than soft notes in model prose.
 

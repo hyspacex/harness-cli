@@ -31,5 +31,8 @@ export function flagEnabled(flags: Record<string, string>, name: string): boolea
 export function parseProviderName(value: string | undefined): ProviderName | undefined {
   if (!value) return undefined;
   if (value === 'claude-sdk' || value === 'codex') return value;
+  if (value === 'pi') {
+    throw new Error('pi is not supported as a --judge-provider; use claude-sdk or codex.');
+  }
   throw new Error(`Unsupported judge provider: ${value}`);
 }

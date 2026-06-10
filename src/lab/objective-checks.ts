@@ -3,7 +3,7 @@ import { exec as execCallback, execFile as execFileCallback } from 'node:child_p
 import { promisify } from 'node:util';
 import { truncate } from '../core/utils.js';
 import type { EvalObjectiveCheck, HarnessEvalCase } from './cases.js';
-import { redactSensitiveText } from './packet.js';
+import { redactSensitiveText } from './redact.js';
 
 const execAsync = promisify(execCallback);
 const execFileAsync = promisify(execFileCallback);
