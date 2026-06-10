@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "builtAt": "2026-06-10T04:52:30.197Z",
+  "results": [
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profile": "min-gpt55-xhigh",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/gpt-variants/isolates/bench-cli-task-tracker/min-gpt55-xhigh/run-root/runs/2026-06-10T03-30-56-162Z-build-a-command-line-task-tracker-as-a-node-js-e",
+      "packetPath": "/tmp/model-compare2/gpt-variants/packets/bench-cli-task-tracker/min-gpt55-xhigh/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/gpt-variants/packets/bench-cli-task-tracker/min-gpt55-xhigh/packet.md"
+    },
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profile": "full-gpt55",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/gpt-variants/isolates/bench-cli-task-tracker/full-gpt55/run-root/runs/2026-06-10T03-36-06-947Z-build-a-command-line-task-tracker-as-a-node-js-e",
+      "packetPath": "/tmp/model-compare2/gpt-variants/packets/bench-cli-task-tracker/full-gpt55/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/gpt-variants/packets/bench-cli-task-tracker/full-gpt55/packet.md"
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-gpt55-xhigh",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/gpt-variants/isolates/bench-backend-notes-api/min-gpt55-xhigh/run-root/runs/2026-06-10T04-13-19-240Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/gpt-variants/packets/bench-backend-notes-api/min-gpt55-xhigh/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/gpt-variants/packets/bench-backend-notes-api/min-gpt55-xhigh/packet.md"
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "full-gpt55",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/gpt-variants/isolates/bench-backend-notes-api/full-gpt55/run-root/runs/2026-06-10T04-19-31-951Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/gpt-variants/packets/bench-backend-notes-api/full-gpt55/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/gpt-variants/packets/bench-backend-notes-api/full-gpt55/packet.md"
+    }
+  ],
+  "comparisons": [
+    {
+      "caseId": "bench-cli-task-tracker",
+      "profileA": "full-gpt55",
+      "profileB": "min-gpt55-xhigh",
+      "outDir": "/tmp/model-compare2/gpt-variants/comparisons/bench-cli-task-tracker/full-gpt55-vs-min-gpt55-xhigh",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "full-gpt55",
+      "profileB": "min-gpt55-xhigh",
+      "outDir": "/tmp/model-compare2/gpt-variants/comparisons/bench-backend-notes-api/full-gpt55-vs-min-gpt55-xhigh",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    }
+  ],
+  "shipGate": {
+    "version": 1,
+    "status": "warning",
+    "ok": false,
+    "checks": [
+      {
+        "id": "all-runs-completed",
+        "status": "pass",
+        "message": "Every planned run completed successfully."
+      },
+      {
+        "id": "packets-built",
+        "status": "pass",
+        "message": "Packets were built for every run with a run directory."
+      },
+      {
+        "id": "required-objective-checks",
+        "status": "pass",
+        "message": "12 objective check result(s) passed."
+      },
+      {
+        "id": "pairwise-judging",
+        "status": "warning",
+        "message": "Comparisons are dry-run prompts only; rerun with --judge-provider for judged evidence."
+      },
+      {
+        "id": "profile-artifact-isolation",
+        "status": "pass",
+        "message": "Each packetized profile has a distinct workspace and run directory."
+      }
+    ]
+  }
+}

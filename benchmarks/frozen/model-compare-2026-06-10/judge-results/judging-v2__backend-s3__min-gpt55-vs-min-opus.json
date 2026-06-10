@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:28:39.452Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T04-56-35-572Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-36-58-324Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 3,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 3,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [
+    "Run A: progress.md states the placeholder smoke test was REPLACED, and its TAP output (3 subtests) contains no fixture-baseline subtest, so the 'fixture baseline test must remain green' requirement is not evidenced as preserved (Run B explicitly keeps and passes 'greenfield fixture baseline stays green')."
+  ],
+  "rationale": "Both runs pass the objective checks (tests + probe-http-lifecycle) and use only Node built-ins at the same minimal ceremony level with identical harness-authored contracts. Run B is decisively stronger on evidence and coverage: 12 granular node:test tests including an explicit baseline-preservation subtest, plus evaluator-produced live HTTP transcripts (clean-smoke.log) proving 201-with-id create, 400 for invalid JSON/missing title/empty body, 404 paths, delete semantics, and a real kill-and-restart persistence check against the running src/server.mjs honoring PORT. B's evaluator also detected and transparently recovered from a stale-server port contamination (EADDRINUSE evidence), and a final-regression log (12/12) is present. Run A works (3/3 tests, probe passes) but has only 3 grouped tests, its TAP shows no fixture baseline subtest and progress.md admits the placeholder smoke test was replaced, its evaluator only re-ran npm test with HTTP-level claims resting on code review (self-rated medium confidence/adequate evidence), and its event log shows two usage-limit aborts requiring generator restarts. No false passes detected in either run, but A's verdict is materially less evidenced than B's."
+}

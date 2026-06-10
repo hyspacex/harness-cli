@@ -2,7 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { buildOverrides, flagEnabled } from '../cli-flags.js';
 import { loadConfig } from '../config.js';
-import { findEvalCase, listEvalCases, type HarnessEvalCase } from '../evals.js';
+import {
+  DEFAULT_BENCHMARK_SUITE_PATH,
+  findEvalCase,
+  listEvalCases,
+  readBenchmarkSuite,
+  type HarnessEvalCase,
+} from '../evals.js';
+import { recommendProfilesWithEvidence } from '../history.js';
 import { expandExecutionProfileSelection, resolveExecutionProfile } from '../profiles.js';
 import type { HarnessConfig } from '../types.js';
 import {
@@ -27,7 +34,12 @@ export async function prepareMatrixRuns(
   positionals: string[],
 ): Promise<PreparedMatrixRuns> {
   const casesDir = flags.cases || 'evals/cases';
-  const evalCases = await resolveMatrixCases(flags, positionals, casesDir);
+  const suite = flags.suite
+    ? await readBenchmarkSuite(flags.suite === 'true' ? DEFAULT_BENCHMARK_SUITE_PATH : flags.suite)
+    : null;
+  const evalCases = suite
+    ? await Promise.all(suite.cases.map((caseRef) => findEvalCase(caseRef, casesDir)))
+    : await resolveMatrixCases(flags, positionals, casesDir);
   if (evalCases.length === 0) {
     throw new Error('No eval cases selected.');
   }
@@ -47,15 +59,13 @@ export async function prepareMatrixRuns(
       ),
   );
   const { config: baseConfig } = await loadConfig(flags.config, buildOverrides(flags));
-  const selection = flags.profiles || flags.profile || 'adaptive';
+  const selection = suite
+    ? suite.profiles.join(',')
+    : flags.profiles || flags.profile || 'adaptive';
   const plannedRuns: PlannedMatrixRun[] = [];
 
   for (const evalCase of evalCases) {
-    const profileNames = expandExecutionProfileSelection(
-      selection,
-      { category: evalCase.category, prompt: evalCase.prompt },
-      baseConfig.profiles,
-    );
+    const profileNames = await resolveProfileSelection(selection, evalCase, baseConfig);
 
     for (const profileName of profileNames) {
       const profile = resolveExecutionProfile(profileName, baseConfig.profiles);
@@ -113,6 +123,7 @@ export async function prepareMatrixRuns(
     mode: execute ? 'execute' : 'dry-run',
     profileSelection: selection,
     casesDir: path.resolve(casesDir),
+    suiteId: suite?.id || null,
     runs: plannedRuns.map((run) => run.plan),
   };
 
@@ -121,6 +132,32 @@ export async function prepareMatrixRuns(
   await writeText(path.join(outDir, 'matrix-plan.md'), renderMatrixPlanMarkdown(plan));
 
   return { outDir, execute, plannedRuns, plan };
+}
+
+async function resolveProfileSelection(
+  selection: string,
+  evalCase: HarnessEvalCase,
+  baseConfig: HarnessConfig,
+): Promise<string[]> {
+  if (selection !== 'adaptive') {
+    return expandExecutionProfileSelection(
+      selection,
+      { category: evalCase.category, prompt: evalCase.prompt },
+      baseConfig.profiles,
+    );
+  }
+
+  const recommendation = await recommendProfilesWithEvidence({
+    runRoot: baseConfig.runRoot,
+    category: evalCase.category,
+    prompt: evalCase.prompt,
+    customProfiles: baseConfig.profiles,
+  });
+  const sourceLabel = recommendation.source === 'evidence'
+    ? `evidence from ${recommendation.scope === 'category' ? `${recommendation.category} runs` : 'all runs'}`
+    : 'heuristic fallback — no comparable run history yet';
+  console.log(`Adaptive profiles for ${evalCase.id}: ${recommendation.profiles.join(', ')} (${sourceLabel})`);
+  return recommendation.profiles;
 }
 
 async function resolveMatrixCases(

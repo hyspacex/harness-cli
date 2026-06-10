@@ -1,8 +1,10 @@
+import { parseRuntimeMode } from './ceremony.js';
 import type { HarnessConfig, ProviderName } from './types.js';
 
 export function buildOverrides(flags: Record<string, string>): Partial<HarnessConfig> {
   const overrides: Partial<HarnessConfig> = {};
   if (flags.provider) overrides.provider = flags.provider as HarnessConfig['provider'];
+  if (flags['runtime-mode']) overrides.runtimeMode = parseRuntimeMode(flags['runtime-mode']);
   if (flags.workspace) overrides.workspace = flags.workspace;
   if (flags['run-root']) overrides.runRoot = flags['run-root'];
   if (flags.approval) overrides.approvalPolicy = flags.approval as HarnessConfig['approvalPolicy'];

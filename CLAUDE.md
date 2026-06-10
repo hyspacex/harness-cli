@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A long-running harness CLI for app-development loops. The harness orchestrates four bounded agent roles — researcher, planner, generator, evaluator — in a sprint cycle. Contracts are negotiated bilaterally: the generator drafts, the evaluator reviews, and they iterate until agreement or the negotiation cap is hit. The harness owns all durable state, not the model session.
+A long-running harness CLI for app-development loops. The harness orchestrates up to four bounded agent roles — researcher, planner, generator, evaluator — in a sprint cycle. How many roles actually run is a measured dial, not a fixed pipeline: the **ceremony ladder** (`runtimeMode: full | flat | minimal`) collapses research/planning/negotiation for strong models while verification gates (independent verdicts, frozen evidence, smoke checks, final regression) stay mandatory at every rung. The harness owns all durable state, not the model session.
 
 Routing is per-role: each role maps to a provider via `roleProviders`. A global `provider` sets the default; `roleProviders` only lists roles that differ.
 
@@ -14,12 +14,15 @@ Routing is per-role: each role maps to a provider via `roleProviders`. A global 
 npm run build:harness    # Compile harness TypeScript to dist/
 npm run build            # Build the app (vite build)
 npm run harness -- init  # Write default harness.config.json
-npm run harness -- run "Build a ..." [--provider claude-sdk|codex] [--workspace path]
+npm run harness -- run "Build a ..." [--provider claude-sdk|codex] [--runtime-mode full|flat|minimal] [--workspace path]
 npm run harness -- resume <run-id>
 npm run harness -- status [run-id]
+npm run harness -- profiles [--recommend "prompt"]   # evidence-based profile recommendation
+npm run harness -- eval matrix --suite [--execute true]  # fixed benchmark grid across the ceremony ladder
+npm run harness -- eval roi  # ceremony ROI report from run history
 ```
 
-Tests: `node --test test/contract-pass-bars.test.mjs`. Node.js >= 20. ESM-only (`"type": "module"` in package.json). The `npm run harness` script auto-runs `build:harness` before executing.
+Tests: `node --test test/*.test.mjs`. Node.js >= 20. ESM-only (`"type": "module"` in package.json). The `npm run harness` script auto-runs `build:harness` before executing.
 
 ## Architecture
 
@@ -29,13 +32,25 @@ Tests: `node --test test/contract-pass-bars.test.mjs`. Node.js >= 20. ESM-only (
 
 1. install configured skills into both `.claude/skills/` and `.agents/skills/`
 2. for Codex runs, copy `CLAUDE.md` to `AGENTS.md` if `AGENTS.md` is missing
-3. run the researcher if `plan/research-brief.md` or `plan/eval-criteria.json` are missing
-4. run the planner if `plan/spec.md`, `plan/backlog.json`, or `plan/project-principles.md` are missing
-5. for each pending feature: negotiate contract, generate, evaluate, repair until pass or round cap
+3. if `ceremony.researcher`, run the researcher when `plan/research-brief.md` or `plan/eval-criteria.json` are missing; otherwise bootstrap those artifacts deterministically (`flat-runtime.ts`)
+4. if `ceremony.planner`, run the planner when `plan/spec.md`, `plan/backlog.json`, or `plan/project-principles.md` are missing; otherwise bootstrap them
+5. for each pending feature: negotiate contract (or harness-author it when `ceremony.negotiationRounds` is 0), generate, evaluate, repair until pass or round cap
 6. after the backlog completes, run a final regression sweep (dev smoke + smoke test)
 7. persist `run.json` and `metrics.json` after every material state change so `resume` can continue safely
 
 The harness keeps durable state under `<runRoot>/runs/<run-id>/`.
+
+### Ceremony ladder (`src/ceremony.ts`)
+
+`resolveCeremony()` turns `runtimeMode` + partial `ceremony` config into explicit dials: `researcher`, `planner`, `negotiationRounds`. `full` = all roles + negotiation; `flat` = bootstrapped plan artifacts, generator-drafted contract; `minimal` = bootstrapped artifacts + harness-authored contract (`src/contract-bootstrap.ts`, no model call, no `passBarOverrides`). `classifyCeremonyLevel()` maps dials back onto the ladder for reporting. Verification gates are not dials and run at every level.
+
+### Run history & evidence (`src/history.ts`, `src/ceremony-roi.ts`)
+
+`loadRunHistory()` aggregates `run.json`/metrics across `<runRoot>/runs/`. `recommendProfilesWithEvidence()` picks the cheapest profile (by measured avg tasks/run) whose completion rate is within tolerance (default 0.15) of the best, scoped to the prompt's category first, falling back to the keyword heuristic in `profiles.ts` when history is too thin (< 2 profiles with >= 2 runs). The matrix planner's `adaptive` selection and `harness profiles --recommend` both use it. `harness eval roi` renders per provider × ceremony level rows plus findings on whether negotiation/role ceremony pays for itself.
+
+### Benchmark suite (`evals/benchmark-suite.json`)
+
+Fixed grid: 8 cases (frontend / backend / CLI, including three greenfield `bench-*` cases on `evals/fixtures/greenfield`) × the ceremony ladder profiles (`full-harness`, `flat`, `minimal`). `harness eval matrix --suite` plans/executes it; suite results are additionally frozen under `benchmarks/frozen/<suiteId>/<builtAt>/`.
 
 ### Provider registry (`src/providers/index.ts`)
 
@@ -178,4 +193,4 @@ logs/*.raw.txt / *.parsed.json   # per-task provider output
 
 ## Working rules for edits
 
-Keep changes small and surgical. If you touch state transitions, verify resume behavior. If you touch provider behavior, make sure prompts still match actual provider capabilities. If you touch verdict/repair directive logic, run `node --test test/contract-pass-bars.test.mjs`. Prefer harness-enforced behavior over relying on the model to follow instructions in prose.
+Keep changes small and surgical. If you touch state transitions, verify resume behavior. If you touch provider behavior, make sure prompts still match actual provider capabilities. If you touch verdict/repair directive logic or the ceremony ladder, run `node --test test/*.test.mjs`. Never make verification gates (verdicts, frozen evidence, smoke, final regression) conditional on ceremony level. Prefer harness-enforced behavior over relying on the model to follow instructions in prose.

@@ -36,6 +36,8 @@ export interface MatrixPlanFile {
   mode: string;
   profileSelection: string;
   casesDir: string;
+  /** Set when the plan came from a benchmark suite manifest. */
+  suiteId?: string | null;
   runs: MatrixRunPlan[];
 }
 

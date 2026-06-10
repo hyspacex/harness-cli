@@ -1,0 +1,306 @@
+[
+  {
+    "cat": "cli",
+    "seed": 1,
+    "profile": "min-opus",
+    "status": "completed",
+    "wall": 285,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 16,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 1,
+    "profile": "min-fable",
+    "status": "completed",
+    "wall": 4070,
+    "tasks": 3,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 18,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 1,
+    "profile": "min-gpt55",
+    "status": "completed",
+    "wall": 305,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 16,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 2,
+    "profile": "min-opus",
+    "status": "completed",
+    "wall": 3408,
+    "tasks": 3,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 19,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 2,
+    "profile": "min-fable",
+    "status": "completed",
+    "wall": 3150,
+    "tasks": 3,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 16,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 2,
+    "profile": "min-gpt55",
+    "status": "completed",
+    "wall": 312,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 3,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 3,
+    "profile": "min-opus",
+    "status": "completed",
+    "wall": 342,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 18,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 3,
+    "profile": "min-fable",
+    "status": "completed",
+    "wall": 430,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 18,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "cli",
+    "seed": 3,
+    "profile": "min-gpt55",
+    "status": "completed",
+    "wall": 251,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 11,
+    "probes": {
+      "probe-add-list": "pass",
+      "probe-unknown-id-fails": "pass",
+      "probe-unknown-command-fails": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 1,
+    "profile": "min-opus",
+    "status": "completed",
+    "wall": 5611,
+    "tasks": 4,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 11,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 1,
+    "profile": "min-fable",
+    "status": "completed",
+    "wall": 5274,
+    "tasks": 3,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 10,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 1,
+    "profile": "min-gpt55",
+    "status": "completed",
+    "wall": 270,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 3,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 2,
+    "profile": "min-opus",
+    "status": "completed",
+    "wall": 4692,
+    "tasks": 3,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 11,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 2,
+    "profile": "min-fable",
+    "status": "completed",
+    "wall": 4763,
+    "tasks": 3,
+    "repairs": [
+      0
+    ],
+    "crashed": true,
+    "tests": 9,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 2,
+    "profile": "min-gpt55",
+    "status": "completed",
+    "wall": 725,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 2,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 3,
+    "profile": "min-opus",
+    "status": "completed",
+    "wall": 408,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 12,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 3,
+    "profile": "min-fable",
+    "status": "completed",
+    "wall": 768,
+    "tasks": 2,
+    "repairs": [
+      0
+    ],
+    "crashed": false,
+    "tests": 10,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  },
+  {
+    "cat": "backend",
+    "seed": 3,
+    "profile": "min-gpt55",
+    "status": "failed",
+    "wall": 2270,
+    "tasks": 3,
+    "repairs": [],
+    "crashed": true,
+    "tests": 3,
+    "probes": {
+      "probe-http-lifecycle": "pass"
+    }
+  }
+]

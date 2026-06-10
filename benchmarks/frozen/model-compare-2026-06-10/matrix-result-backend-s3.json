@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "builtAt": "2026-06-10T04:59:15.746Z",
+  "results": [
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-opus",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/backend-s3/isolates/bench-backend-notes-api/min-opus/run-root/runs/2026-06-10T04-36-58-324Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/backend-s3/packets/bench-backend-notes-api/min-opus/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/backend-s3/packets/bench-backend-notes-api/min-opus/packet.md"
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-fable",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/backend-s3/isolates/bench-backend-notes-api/min-fable/run-root/runs/2026-06-10T04-43-46-759Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/backend-s3/packets/bench-backend-notes-api/min-fable/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/backend-s3/packets/bench-backend-notes-api/min-fable/packet.md"
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-gpt55",
+      "ok": false,
+      "status": "failed",
+      "runDir": "/tmp/model-compare2/backend-s3/isolates/bench-backend-notes-api/min-gpt55/run-root/runs/2026-06-10T04-56-35-572Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/backend-s3/packets/bench-backend-notes-api/min-gpt55/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/backend-s3/packets/bench-backend-notes-api/min-gpt55/packet.md",
+      "error": "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Jun 10th, 2026 12:00 AM."
+    }
+  ],
+  "comparisons": [
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "min-fable",
+      "profileB": "min-gpt55",
+      "outDir": "/tmp/model-compare2/backend-s3/comparisons/bench-backend-notes-api/min-fable-vs-min-gpt55",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "min-fable",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/backend-s3/comparisons/bench-backend-notes-api/min-fable-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "min-gpt55",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/backend-s3/comparisons/bench-backend-notes-api/min-gpt55-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    }
+  ],
+  "shipGate": {
+    "version": 1,
+    "status": "fail",
+    "ok": false,
+    "checks": [
+      {
+        "id": "all-runs-completed",
+        "status": "fail",
+        "message": "1 run(s) failed, were missing, or did not complete."
+      },
+      {
+        "id": "packets-built",
+        "status": "pass",
+        "message": "Packets were built for every run with a run directory."
+      },
+      {
+        "id": "required-objective-checks",
+        "status": "pass",
+        "message": "6 objective check result(s) passed."
+      },
+      {
+        "id": "pairwise-judging",
+        "status": "warning",
+        "message": "Comparisons are dry-run prompts only; rerun with --judge-provider for judged evidence."
+      },
+      {
+        "id": "profile-artifact-isolation",
+        "status": "pass",
+        "message": "Each packetized profile has a distinct workspace and run directory."
+      }
+    ]
+  }
+}

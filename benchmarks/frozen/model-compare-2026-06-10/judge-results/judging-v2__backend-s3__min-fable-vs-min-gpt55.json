@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:27:27.006Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T04-43-46-759Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-56-35-572Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 4
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 5,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs ship a functionally complete, dependency-free notes API through src/server.mjs honoring PORT, with all four endpoints, file persistence, and JSON error paths. Both pass the objective checks (tests + probe-http-lifecycle) and the baseline fixture stays green; neither adds npm deps and neither is a false pass.\\n\\nRun A is stronger on every dimension. Tests: 10 requirement-mapped tests (separate create/list/fetch/delete, a real two-process restart-persistence test, dedicated 404/400 cases, and a child-process CLI test honoring PORT) vs Run B's 3 coarse tests (one bundles all CRUD). Evaluation trustworthiness is the biggest gap: Run A's evaluator independently exercised the live API with saved curl transcripts showing concrete 201/200/400/404/405 responses, a genuine restart transcript with port-closed verification, AND discovered and reproduced a real (low-severity, out-of-contract) write-queue-poisoning bug with saved stderr — 4 frozen evidence files, high confidence/strong evidence. Run B's evaluator did code review plus a single rerun of `npm test` (1 frozen log), self-admits no live API session, and rates medium/adequate; individual error-path status codes are not separately evidenced.\\n\\nHarness process: Run A ran clean in one generator pass. Run B hit provider usage limits twice and needed two restarts over ~2.5h; resume worked correctly (a credit to the harness) but the process was noisier. Both used the same minimal ceremony level, so contract/planning artifacts are identical and generic.\\n\\nThe only defect in Run A is a low-severity robustness edge case outside the contracted behavior, fully documented. Run A wins clearly on product quality and decisively on evidence quality."
+}

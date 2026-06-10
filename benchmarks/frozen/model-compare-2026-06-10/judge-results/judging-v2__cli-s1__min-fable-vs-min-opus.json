@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T12:57:29.254Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T03-35-41-162Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-30-54-015Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "B",
+  "confidence": 3,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 4,
+      "B": 5
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs produce working CLI implementations that pass all objective probe checks. The key differentiators are:\n\n**taskFulfillment:** Run B (5) demonstrates cleaner, more complete implementation with frozen evidence showing explicit stdout=[] on all error paths and separate override-and-defaults transcript covering default path fallback, nested dir auto-create, and explicit TASKS_FILE persistence. Run A (4) covers the same ground but the evidence transcript is slightly less structured. Both satisfy all four commands end-to-end.\n\n**correctness:** Run B (5) passes 16/16 tests including the baseline, with clean smoke-test logs run both pre-evaluation and in final regression. Run A (4) passes 18/18 but includes 17 CLI tests (15 unique + baseline), suggesting a slightly larger test surface that still passes. Both use child-process invocation against temp TASKS_FILE. Run B evidence explicitly shows stdout=[] on every error path in the frozen error-paths.txt, which is stronger discipline evidence. Neither has critical regressions.\n\n**implementationQuality:** Both runs produce clean ESM implementations with no npm deps, child-process tests, and focused diffs. Run A added 17 tests vs Run B's 15, covering additional edge cases (blank title, corrupt store, zero id). However, Run A's generator task had a process crash/retry (events.ndjson shows run.error at 03:47:08 followed by a restart at 04:37:11, meaning the generator ran nearly an hour late and had stray probe files to clean up). Run B completed cleanly in ~2.5 minutes with no errors. Score is roughly equal at 4 for both given the different trade-offs.\n\n**harnessProcessQuality:** Run B (4) is cleaner: generator started once and finished successfully, smoke tests ran both pre-eval and post-eval (final regression log present), no errors in events.ndjson, all artifacts clean. Run A (3) had a process crash at the first generator attempt (run.error event), a ~50-minute gap, and stray probe artifacts (.probe-err.txt, .probe-err2.txt, .probe-tasks.json) that needed cleanup - indicating the generator was exploring rather than executing cleanly. The minimal-runtime contract is identical and generic in both runs (harness-authored, no negotiation rounds), which is expected for the ceremony level.\n\n**evaluationTrustworthiness:** Run B (5) has superior evidence organization: four separate frozen evidence files (happy-path.txt, error-paths.txt, override-and-defaults.txt, npm-test.log) each covering distinct behaviors, with explicit stdout=[] captures on error paths and a dedicated override-and-defaults transcript. The evaluator also ran a final regression check logged separately. Run A (4) has good evidence (manual-smoke.txt plus npm-test.txt) with explicit stderr/stdout separation checks, but the evidence is more compressed into two files and the generator's initial crash slightly muddies the process chain.\n\n**Winner: B** — cleaner single-pass generation, better-organized multi-file evidence with explicit stdout discipline on error paths, final regression log, and no process errors or artifact cleanup required. The margin is moderate (confidence 3) because both runs fully satisfy functional requirements and pass all objective checks."
+}

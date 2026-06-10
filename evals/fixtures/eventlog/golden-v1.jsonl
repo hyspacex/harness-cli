@@ -1,0 +1,12 @@
+{"seq":"1","ts":"2026-03-02T09:14:05.120Z","type":"add","name":"widget","qty":5}
+{"seq":"2","ts":"2026-03-02T09:14:38.402Z","type":"add","name":"gear","qty":10}
+{"seq":"3","ts":"2026-03-03T11:02:11.778Z","type":"adjust","name":"widget","delta":2}
+{"seq":"4","ts":"2026-03-04T16:45:00.031Z","type":"remove","name":"gear"}
+{"seq":"5","ts":"2026-03-04T16:45:21.604Z","type":"adjust","name":"gear","delta":4}
+{"seq":"6","ts":"2026-03-05T08:20:43.218Z","type":"add","name":"bolt","qty":3}
+{"seq":"7","ts":"2026-03-05T08:21:02.951Z","type":"adjust","name":"bolt","delta":-1}
+{"seq":"8","ts":"2026-03-06T13:37:55.040Z","type":"add","name":"nut","qty":8}
+{"seq":"9","ts":"2026-03-06T13:39:10.473Z","type":"remove","name":"nut"}
+{"seq":"10","ts":"2026-03-07T10:11:09.265Z","type":"adjust","name":"bolt","delta":3}
+{"seq":"11","ts":"2026-03-07T10:12:30.886Z","type":"add","name":"cam","qty":1}
+{"seq":"12","ts":"2026-03-07T10:13:14.119Z","type":"adjust","name":"cam","delta":5}

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "id": "bench-frontend-status-page",
+  "title": "Frontend: dependency-free service status page",
+  "category": "frontend",
+  "prompt": "Build a service status dashboard as a static page (index.html plus vanilla ES modules, no npm dependencies and no build step). Render a list of services from a JSON data module with name, status (operational | degraded | down), and lastChecked. Show a summary banner that is green only when every service is operational, support filtering by status, and sort outages first. Put the summary/filter/sort logic in a pure ES module separate from DOM code and cover it with node --test unit tests, including the empty-services and all-down edge cases.",
+  "workspaceFixture": "evals/fixtures/greenfield",
+  "harnessConfig": {
+    "maxSprints": 3,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "test": "npm test"
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "tests",
+      "argv": ["npm", "test"],
+      "cwd": ".",
+      "timeoutMs": 120000
+    }
+  ],
+  "judgeFocus": [
+    "pure logic module separated from DOM code and unit tested",
+    "banner state correct for mixed, all-operational, and all-down data",
+    "filtering and outage-first sorting behavior",
+    "no dependencies or build step introduced"
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "The page must render service states, filter by status, and sort outages first.",
+      "The summary banner must be green only when every service is operational.",
+      "Summary/filter/sort logic must live in a pure module covered by node --test tests.",
+      "The fixture baseline test must remain green with no npm dependencies added."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace implements rendering, the summary banner, filtering, and outage-first sorting described in the prompt."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether tests pass and the logic handles mixed, empty, and all-down service data without regressions."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, real separation between pure logic and DOM wiring, small focused diff, and meaningful unit coverage."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of planning artifacts, contract specificity, and repair-loop behavior relative to the ceremony level used."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts are backed by reproducible command evidence rather than claims."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "Logic embedded directly in DOM event handlers without a testable pure module should cap implementationQuality at 3.",
+      "Prefer concrete test output evidence over implementation claims."
+    ]
+  },
+  "notes": "Part of the ceremony-ladder benchmark suite. Designed to compare ceremony levels and providers on identical frontend work."
+}

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:26:51.028Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T04-25-00-598Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T04-19-16-155Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 5,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy the core CLI requirements, pass npm test, keep the baseline green, and pass all objective probes. Run A is stronger overall because its evidence is more complete and diagnostic: detailed manual smoke logs include command transcripts, exit codes, stored JSON, default-path behavior, corrupt and wrong-shape store behavior, and frozen evidence, in addition to 18/18 tests. Its implementation also appears stricter, rejecting extra list args and covering remove non-numeric id in tests. Run B is also a successful implementation with child-process tests and passing probes, but it has minor quality/evidence gaps: add silently ignores extra positional args, the test log does not show a remove non-numeric-id case, manual smoke evidence is less explicit about commands and default-path behavior, and it relies more on evaluator claims for some coverage. Harness process quality is effectively tied because both used the same minimal, generic harness-authored contract with no repair loop, though both maintained progress and handoff artifacts."
+}

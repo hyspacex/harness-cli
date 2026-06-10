@@ -14,12 +14,14 @@ import {
   writeEvalRunPacket,
   writeJudgeComparisonArtifacts,
 } from './evals.js';
+import { buildCeremonyRoiReport, renderCeremonyRoiMarkdown } from './ceremony-roi.js';
 import { runEvalMatrix } from './eval-matrix.js';
 import { HarnessRunner } from './harness.js';
+import { loadRunHistory, recommendProfilesWithEvidence } from './history.js';
 import { listExecutionProfiles } from './profiles.js';
 import { createProvider } from './providers/index.js';
-import { listDirectories, readJson, slugify } from './utils.js';
-import type { ProviderName, RunState } from './types.js';
+import { ensureDir, listDirectories, nowIso, readJson, slugify, writeJson, writeText } from './utils.js';
+import type { HarnessConfig, ProviderName, RunState } from './types.js';
 
 async function main(): Promise<void> {
   const { command, positionals, flags } = parseArgv(process.argv.slice(2));
@@ -36,7 +38,7 @@ async function main(): Promise<void> {
       if (!prompt) {
         throw new Error('Provide a prompt. Example: harness run "Build a small CRM dashboard"');
       }
-      const runner = await createRunner(flags);
+      const runner = await createRunner(flags, prompt);
       const result = await runner.runNew(prompt);
       printRunSummary(result);
       return;
@@ -119,15 +121,72 @@ async function handleEvalCommand(flags: Record<string, string>, positionals: str
       await runEvalMatrix(flags, positionals);
       return;
     }
+    case 'roi': {
+      await writeCeremonyRoiReport(flags);
+      return;
+    }
     case 'help':
     default:
       printEvalHelp();
   }
 }
 
+async function writeCeremonyRoiReport(flags: Record<string, string>): Promise<void> {
+  const { config } = await loadConfig(flags.config, buildOverrides(flags));
+  const entries = await loadRunHistory(config.runRoot, config.profiles);
+  const report = buildCeremonyRoiReport(entries, {
+    runRoot: config.runRoot,
+    builtAt: nowIso(),
+  });
+
+  const outDir = path.resolve(flags.out || path.join(config.runRoot, 'reports'));
+  await ensureDir(outDir);
+  const jsonPath = path.join(outDir, 'ceremony-roi.json');
+  const markdownPath = path.join(outDir, 'ceremony-roi.md');
+  await writeJson(jsonPath, report);
+  await writeText(markdownPath, renderCeremonyRoiMarkdown(report));
+
+  console.log(`Ceremony ROI report (${report.totalRuns} run(s) analyzed):`);
+  for (const finding of report.findings) {
+    console.log(`- ${finding}`);
+  }
+  console.log('');
+  console.log(`Wrote ${jsonPath}`);
+  console.log(`Wrote ${markdownPath}`);
+}
+
 async function printProfiles(flags: Record<string, string>): Promise<void> {
   const { config } = await loadConfig(flags.config, buildOverrides(flags));
   const profiles = listExecutionProfiles(config.profiles);
+
+  if (flags.recommend) {
+    const recommendation = await recommendProfilesWithEvidence({
+      runRoot: config.runRoot,
+      category: flags.category || null,
+      prompt: flags.recommend === 'true' ? null : flags.recommend,
+      customProfiles: config.profiles,
+    });
+    console.log(`Recommended profiles: ${recommendation.profiles.join(', ')}`);
+    console.log(`Category: ${recommendation.category}`);
+    if (recommendation.source === 'evidence') {
+      console.log(`Source: run-history evidence (${recommendation.scope === 'category' ? 'matching category' : 'all runs'})`);
+      for (const item of recommendation.evidence) {
+        const firstRound = item.firstRoundPassRate === null
+          ? 'n/a'
+          : `${Math.round(item.firstRoundPassRate * 100)}%`;
+        console.log(
+          `  ${item.profile}: ${item.runs} run(s), ` +
+            `${Math.round(item.completionRate * 100)}% completed, ` +
+            `${item.avgTasksStarted.toFixed(1)} avg tasks/run, ` +
+            `first-round pass ${firstRound}`,
+        );
+      }
+    } else {
+      console.log('Source: keyword heuristic (no comparable run history under this run root yet)');
+    }
+    console.log('');
+    return;
+  }
 
   for (const profile of profiles) {
     console.log(`${profile.name}`);
@@ -165,7 +224,9 @@ async function compareEvalRuns(flags: Record<string, string>, positionals: strin
     workspace: flags.workspace || null,
     runObjectiveChecks: flagEnabled(flags, 'objective-checks'),
   });
-  const prompt = buildPairwiseJudgePrompt(evalCase, packetA, packetB);
+  const prompt = buildPairwiseJudgePrompt(evalCase, packetA, packetB, {
+    blind: flagEnabled(flags, 'blind-judge'),
+  });
 
   const outDir = path.resolve(
     flags.out ||
@@ -230,6 +291,13 @@ async function runLlmJudge(
   const { config } = await loadConfig(flags.config, buildOverrides(judgeFlags), {
     profile: flags['judge-profile'] || flags.profile || null,
   });
+  if (flags['judge-model']) {
+    if (judgeProvider === 'codex') {
+      config.codex.model = flags['judge-model'];
+    } else {
+      config.claudeSdk.model = flags['judge-model'];
+    }
+  }
   const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
@@ -263,9 +331,43 @@ async function runLlmJudge(
   };
 }
 
-async function createRunner(flags: Record<string, string>): Promise<HarnessRunner> {
+/**
+ * `--profile adaptive` on `harness run` resolves to a concrete profile via
+ * run-history evidence (cheapest within tolerance of the best), falling back
+ * to the keyword heuristic until enough history exists.
+ */
+async function resolveRunProfile(
+  flags: Record<string, string>,
+  overrides: Partial<HarnessConfig>,
+  prompt?: string,
+): Promise<string | null> {
+  if (flags.profile !== 'adaptive') {
+    return flags.profile || null;
+  }
+  if (!prompt) {
+    throw new Error('--profile adaptive needs a prompt; use a concrete profile name for resume/status.');
+  }
+
+  const { config } = await loadConfig(flags.config, overrides);
+  const recommendation = await recommendProfilesWithEvidence({
+    runRoot: config.runRoot,
+    category: flags.category || null,
+    prompt,
+    customProfiles: config.profiles,
+  });
+  const chosen = recommendation.profiles[0];
+  console.log(
+    `Adaptive profile: ${chosen} (${recommendation.source === 'evidence'
+      ? `run-history evidence, ${recommendation.scope === 'category' ? `${recommendation.category} runs` : 'all runs'}`
+      : 'keyword heuristic — no comparable run history yet'})`,
+  );
+  return chosen;
+}
+
+async function createRunner(flags: Record<string, string>, prompt?: string): Promise<HarnessRunner> {
   const overrides = buildOverrides(flags);
-  const { config } = await loadConfig(flags.config, overrides, { profile: flags.profile || null });
+  const profile = await resolveRunProfile(flags, overrides, prompt);
+  const { config } = await loadConfig(flags.config, overrides, { profile });
   const providerRegistry = createProvider(config, {
     onStdErr: (chunk) => {
       const text = String(chunk || '').trim();
@@ -342,22 +444,30 @@ function printHelp(): void {
 
 Commands:
   harness init [--config harness.config.json]
-  harness profiles [--config file]
-  harness run "Build a ..." [--config file] [--profile name] [--provider claude-sdk|codex] [--workspace path]
+  harness profiles [--config file] [--recommend "prompt" [--category name]]
+  harness run "Build a ..." [--config file] [--profile name|adaptive] [--provider claude-sdk|codex] [--workspace path]
   harness resume <runId> [--config file] [--profile name]
   harness status [runId] [--config file] [--profile name]
-  harness eval <list|packet|compare|matrix> [flags]
+  harness eval <list|packet|compare|matrix|roi> [flags]
 
 Flags:
   --config <path>       Config file path (default: ./harness.config.json)
   --profile <name>      Execution profile to apply (run/status) or one matrix profile
   --provider <name>     Override provider from config
+  --runtime-mode <mode> Ceremony ladder rung: full | flat | minimal
   --workspace <path>    Override workspace from config
   --run-root <path>     Override run root from config
   --approval <policy>   allow_once | allow_always | reject_once | reject_always
   --max-sprints <N>     Max features/sprints to run
   --max-repair-rounds <N>  Max repair rounds per sprint
   --max-negotiation-rounds <N>  Max contract negotiation rounds (default: 3)
+
+Ceremony ladder:
+  full     separate researcher + planner, negotiated contracts
+  flat     bootstrapped plan artifacts, generator-drafted contract, one review
+  minimal  bootstrapped plan artifacts, harness-authored contract, zero negotiation
+  Verification gates (verdicts, frozen evidence, smoke, final regression) run at every rung.
+  "harness profiles --recommend" picks the cheapest rung the run history supports.
 `);
 }
 
@@ -369,7 +479,9 @@ Commands:
   harness eval packet <runDir> [--case id|path] [--out packet.json] [--markdown] [--objective-checks]
   harness eval compare --case id|path --a <runDir> --b <runDir> [--out dir] [--judge-provider claude-sdk|codex]
   harness eval matrix --case id|path|all [--profiles adaptive|name,name] [--out dir] [--execute true] [--judge-provider claude-sdk|codex]
+  harness eval matrix --suite [evals/benchmark-suite.json] [--out dir] [--execute true]
   harness eval matrix report --from <matrixOutDir> [--judge-provider claude-sdk|codex]
+  harness eval roi [--run-root path] [--out dir]
 
 Notes:
   compare writes packet-a.json, packet-b.json, judge-prompt.md, and judge-result.json.
@@ -377,7 +489,11 @@ Notes:
   matrix defaults to dry mode and writes matrix-plan.json plus matrix-plan.md.
   When executed, matrix writes per-profile packets, matrix-result.md, and pairwise comparison prompts/results.
   matrix report rebuilds packets, matrix-result.md, and comparisons from an existing matrix-plan.json.
+  matrix --suite runs the fixed benchmark grid (cases x ceremony-ladder profiles) and freezes results under benchmarks/frozen/.
+  roi aggregates run history into a ceremony ROI report: per provider, does role/negotiation ceremony pay for itself?
   Add --objective-checks true to run case-defined commands while building packets.
+  Add --blind-judge true to redact profile/provider/model identifiers from judge prompts.
+  Add --judge-model <model> to override the judge's model (e.g. a non-participant model for fairness).
 `);
 }
 

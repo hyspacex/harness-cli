@@ -90,6 +90,15 @@ export interface EvalCaseSummary {
   path: string;
 }
 
+/** A fixed list of eval cases and profiles to run as one benchmark grid. */
+export interface BenchmarkSuite {
+  version: 1;
+  id: string;
+  description?: string;
+  cases: string[];
+  profiles: string[];
+}
+
 export interface EvalObjectiveCheckResult {
   id: string;
   command: string;
@@ -197,6 +206,29 @@ export async function listEvalCases(casesDir = DEFAULT_CASES_DIR): Promise<EvalC
     }
   }
   return summaries.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export const DEFAULT_BENCHMARK_SUITE_PATH = 'evals/benchmark-suite.json';
+
+export async function readBenchmarkSuite(filePath = DEFAULT_BENCHMARK_SUITE_PATH): Promise<BenchmarkSuite> {
+  const absolutePath = path.resolve(filePath);
+  const value = await readJson<unknown>(absolutePath, null);
+  if (!isPlainObject(value)) {
+    throw new Error(`Benchmark suite not found or not a JSON object: ${absolutePath}`);
+  }
+  if (value.version !== 1) {
+    throw new Error(`Benchmark suite version must be 1: ${absolutePath}`);
+  }
+  if (typeof value.id !== 'string' || !value.id) {
+    throw new Error(`Benchmark suite is missing id: ${absolutePath}`);
+  }
+  for (const field of ['cases', 'profiles'] as const) {
+    const items = value[field];
+    if (!Array.isArray(items) || items.length === 0 || !items.every((item) => typeof item === 'string' && item)) {
+      throw new Error(`Benchmark suite ${value.id} ${field} must be a non-empty array of strings`);
+    }
+  }
+  return value as unknown as BenchmarkSuite;
 }
 
 export async function findEvalCase(ref: string, casesDir = DEFAULT_CASES_DIR): Promise<HarnessEvalCase> {
@@ -522,10 +554,28 @@ export function renderEvalRunPacketMarkdown(packet: EvalRunPacket): string {
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * Redact identity signals (profile names, providers, model names) from judge
+ * input so the judge cannot recognize which model produced a run. Process
+ * evidence (commands, tests, artifacts) is preserved.
+ */
+export function blindJudgeText(text: string, identifiers: string[] = []): string {
+  let result = text;
+  const uniqueIdentifiers = Array.from(new Set(identifiers.filter(Boolean)))
+    .sort((a, b) => b.length - a.length);
+  uniqueIdentifiers.forEach((identifier, index) => {
+    result = result.split(identifier).join(`run-profile-${index + 1}`);
+  });
+  return result
+    .replace(/\b(claude-sdk|codex)\b/g, 'redacted-provider')
+    .replace(/\b(claude|gpt|gemini|opus|sonnet|haiku|fable)[-_a-z0-9.]*\b/gi, 'redacted-model');
+}
+
 export function buildPairwiseJudgePrompt(
   evalCase: HarnessEvalCase,
   packetA: EvalRunPacket,
   packetB: EvalRunPacket,
+  options: { blind?: boolean } = {},
 ): string {
   const dimensions = evalCase.judgeRubric.dimensions;
   const dimensionScores = Object.fromEntries(
@@ -541,9 +591,9 @@ export function buildPairwiseJudgePrompt(
     rationale: '...',
   };
 
-  return `You are judging two complete harness runs for the same eval case.
+  const prompt = `You are judging two complete harness runs for the same eval case.
 
-The runs are blinded as Run A and Run B. Do not assume either run is the baseline or candidate.
+The runs are blinded as Run A and Run B. Do not assume either run is the baseline or candidate.${options.blind ? '\nProvider, model, and profile identifiers have been redacted from both packets; judge only the work and the evidence.' : ''}
 Compare the final product quality AND the harness process quality.
 
 Case id: ${evalCase.id}
@@ -578,6 +628,14 @@ ${renderEvalRunPacketMarkdown(packetA)}
 
 ${renderEvalRunPacketMarkdown(packetB)}
 `;
+
+  if (!options.blind) {
+    return prompt;
+  }
+  return blindJudgeText(prompt, [
+    packetA.run.executionProfile || '',
+    packetB.run.executionProfile || '',
+  ]);
 }
 
 function renderJudgeRubric(rubric: EvalJudgeRubric): string {
@@ -767,7 +825,13 @@ async function readSnippet(filePath: string, maxSnippetChars: number): Promise<s
   return `${text.slice(0, maxSnippetChars)}\n... [truncated ${text.length - maxSnippetChars} chars]`;
 }
 
-function resolveObjectiveWorkspace(
+/**
+ * Objective checks must run against the executed run's workspace, not the
+ * pristine case fixture — the fixture is the starting template and would make
+ * every post-run behavior check fail (or pass) spuriously. The fixture is only
+ * a last resort when the run state has no workspace recorded.
+ */
+export function resolveObjectiveWorkspace(
   evalCase: HarnessEvalCase | null | undefined,
   workspace: string | null | undefined,
   runWorkspace: string,
@@ -775,10 +839,13 @@ function resolveObjectiveWorkspace(
   if (workspace) {
     return path.resolve(workspace);
   }
+  if (runWorkspace) {
+    return path.resolve(runWorkspace);
+  }
   if (evalCase?.workspaceFixture) {
     return path.resolve(evalCase.workspaceFixture);
   }
-  return path.resolve(runWorkspace);
+  return path.resolve('.');
 }
 
 async function runObjectiveChecks(

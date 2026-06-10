@@ -6,6 +6,7 @@ import type {
   Backlog,
   CanonicalContract,
   CanonicalEvaluation,
+  CeremonyConfig,
   ConfidenceLevel,
   EvidenceQuality,
   EvalCriteria,
@@ -20,6 +21,8 @@ import type {
   RunState,
   TaskCapabilities,
 } from './types.js';
+import { describeCeremony, resolveCeremony } from './ceremony.js';
+import { buildHarnessAuthoredContract } from './contract-bootstrap.js';
 import { DevServer } from './dev-server.js';
 import {
   appendNdjson,
@@ -92,6 +95,7 @@ interface SprintProgress {
 
 export class HarnessRunner {
   private config: HarnessConfig;
+  private ceremony: CeremonyConfig;
   private providerRegistry: ProviderRegistry;
   private roleProviders: RoleProviderMap;
   private capabilities: Record<'researcher' | 'planner' | 'generator' | 'evaluator', TaskCapabilities>;
@@ -99,6 +103,7 @@ export class HarnessRunner {
 
   constructor(config: HarnessConfig, providerRegistry: ProviderRegistry, output: Output = console) {
     this.config = config;
+    this.ceremony = resolveCeremony(config);
     this.providerRegistry = providerRegistry;
     this.roleProviders = providerRegistry.getRouting();
     this.capabilities = {
@@ -835,12 +840,16 @@ export class HarnessRunner {
   // ---------- Research / plan ----------
 
   private async ensurePlanningArtifacts(runState: RunState): Promise<{ evalCriteria: EvalCriteria | null; backlog: Backlog }> {
-    if (this.config.runtimeMode === 'flat') {
-      return this.ensureFlatPlan(runState);
+    if (!this.ceremony.researcher || !this.ceremony.planner || this.ceremony.negotiationRounds < 1) {
+      this.output.log(`✦ Ceremony: ${describeCeremony(this.ceremony)}`);
     }
 
-    const evalCriteria = await this.ensureResearch(runState);
-    const backlog = await this.ensurePlan(runState, evalCriteria);
+    const evalCriteria = this.ceremony.researcher
+      ? await this.ensureResearch(runState)
+      : await this.ensureBootstrappedResearch(runState);
+    const backlog = this.ceremony.planner
+      ? await this.ensurePlan(runState, evalCriteria)
+      : await this.ensureBootstrappedPlan(runState);
     return { evalCriteria, backlog };
   }
 
@@ -920,15 +929,13 @@ export class HarnessRunner {
     return backlog;
   }
 
-  private async ensureFlatPlan(runState: RunState): Promise<{ evalCriteria: EvalCriteria; backlog: Backlog }> {
+  private bootstrapMode(): 'flat' | 'minimal' {
+    return this.config.runtimeMode === 'minimal' || this.ceremony.negotiationRounds < 1 ? 'minimal' : 'flat';
+  }
+
+  private async ensureBootstrappedResearch(runState: RunState): Promise<EvalCriteria | null> {
     const paths = this.runPaths(runState);
-    const requiredArtifacts = [
-      paths.researchBrief,
-      paths.evalCriteria,
-      paths.spec,
-      paths.backlog,
-      paths.projectPrinciples,
-    ];
+    const requiredArtifacts = [paths.researchBrief, paths.evalCriteria];
     const complete = (await Promise.all(requiredArtifacts.map((artifactPath) => fileExists(artifactPath))))
       .every(Boolean);
 
@@ -938,25 +945,44 @@ export class HarnessRunner {
       const artifacts = buildFlatRuntimeArtifacts({
         prompt: runState.prompt,
         maxSprints: this.config.maxSprints,
+        mode: this.bootstrapMode(),
       });
       await Promise.all([
         writeText(paths.researchBrief, artifacts.researchBrief),
         writeJson(paths.evalCriteria, artifacts.evalCriteria),
+      ]);
+      await this.freezeBenchmarkArtifacts(runState, 'research-bootstrap', requiredArtifacts);
+    }
+
+    return readJson<EvalCriteria | null>(paths.evalCriteria, null);
+  }
+
+  private async ensureBootstrappedPlan(runState: RunState): Promise<Backlog> {
+    const paths = this.runPaths(runState);
+    const requiredArtifacts = [paths.spec, paths.backlog, paths.projectPrinciples];
+    const complete = (await Promise.all(requiredArtifacts.map((artifactPath) => fileExists(artifactPath))))
+      .every(Boolean);
+
+    if (!complete) {
+      runState.status = 'planning';
+      await this.saveRunState(runState);
+      const artifacts = buildFlatRuntimeArtifacts({
+        prompt: runState.prompt,
+        maxSprints: this.config.maxSprints,
+        mode: this.bootstrapMode(),
+      });
+      await Promise.all([
         writeText(paths.spec, artifacts.spec),
         writeJson(paths.backlog, artifacts.backlog),
         writeText(paths.projectPrinciples, artifacts.projectPrinciples),
       ]);
-      await this.freezeBenchmarkArtifacts(runState, 'flat-plan', requiredArtifacts);
+      await this.freezeBenchmarkArtifacts(runState, 'plan-bootstrap', requiredArtifacts);
     }
 
-    const evalCriteria = await readJson<EvalCriteria>(paths.evalCriteria, buildFlatRuntimeArtifacts({
-      prompt: runState.prompt,
-      maxSprints: this.config.maxSprints,
-    }).evalCriteria);
     const backlogRaw = await readJson<Backlog | null>(paths.backlog, null);
     const backlog = validateBacklogSprintBudget(validateBacklog(backlogRaw), this.config.maxSprints);
     await writeJson(paths.backlog, backlog);
-    return { evalCriteria, backlog };
+    return backlog;
   }
 
   // ---------- Contract negotiation ----------
@@ -979,7 +1005,12 @@ export class HarnessRunner {
     feature: Feature,
     evalCriteria: EvalCriteria | null,
   ): Promise<void> {
-    const maxRounds = Math.max(1, this.config.maxNegotiationRounds);
+    if (this.ceremony.negotiationRounds < 1) {
+      await this.ensureHarnessAuthoredContract(runState, feature);
+      return;
+    }
+
+    const maxRounds = Math.max(1, this.ceremony.negotiationRounds);
     const sprintPad = this.sprintPad(runState.sprint);
 
     if (!runState.currentNegotiation || runState.currentNegotiation.featureId !== feature.id) {
@@ -1123,6 +1154,58 @@ export class HarnessRunner {
     this.output.log(`⚠ Contract negotiation exhausted after ${maxRounds} round(s) — using last draft`);
     negotiation.passBarOverrides = await this.extractPassBarOverrides(runState, evalCriteria);
     await this.saveRunState(runState);
+  }
+
+  /**
+   * Ceremony level with zero negotiation rounds: the harness deterministically
+   * authors the sprint contract from the feature's acceptance criteria.
+   * No pass bar overrides are possible on this path, so the verdict applies
+   * the unmodified pass bars from eval-criteria.json.
+   */
+  private async ensureHarnessAuthoredContract(runState: RunState, feature: Feature): Promise<void> {
+    const existing = runState.currentNegotiation;
+    if (
+      existing &&
+      existing.featureId === feature.id &&
+      existing.status === 'approved' &&
+      existing.finalContractPath &&
+      (await fileExists(existing.finalContractPath))
+    ) {
+      runState.currentContractPath = existing.finalContractPath;
+      return;
+    }
+
+    const contractPath = this.contractPath(runState.sprint, runState.runDir);
+    const contractJsonPath = this.contractJsonPath(runState.sprint, runState.runDir);
+    const authored = buildHarnessAuthoredContract({
+      feature,
+      sprint: runState.sprint,
+      contractMarkdownPath: contractPath,
+      smoke: { start: this.config.smoke.start, test: this.config.smoke.test },
+    });
+
+    await writeText(contractPath, authored.markdown);
+    await writeJson(contractJsonPath, authored.contract);
+
+    runState.currentContractPath = contractPath;
+    runState.currentContractJsonPath = contractJsonPath;
+    runState.currentNegotiation = {
+      featureId: feature.id,
+      sprint: runState.sprint,
+      rounds: [],
+      finalContractPath: contractPath,
+      status: 'approved',
+      passBarOverrides: {},
+    };
+    await this.saveRunState(runState);
+    await this.log(runState, {
+      type: 'contract.harness_authored',
+      featureId: feature.id,
+      sprint: runState.sprint,
+      contractPath: relativeTo(runState.runDir, contractPath),
+      contractJsonPath: relativeTo(runState.runDir, contractJsonPath),
+    });
+    this.output.log('✦ Contract authored by harness (negotiation dialed to 0 rounds)');
   }
 
   // ---------- Generator / evaluator ----------

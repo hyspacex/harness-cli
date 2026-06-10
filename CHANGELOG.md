@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added the ceremony ladder: `runtimeMode` now accepts `full | flat | minimal`, resolved into explicit dials (`ceremony.researcher`, `ceremony.planner`, `ceremony.negotiationRounds`) that can also be set individually in config or profiles. New built-in `flat` and `minimal` execution profiles cover the ladder alongside `full-harness`.
+- Added harness-authored contracts: at `ceremony.negotiationRounds = 0` the harness deterministically writes the canonical sprint contract from the feature's acceptance criteria — no model calls, no `passBarOverrides` — so minimal-ceremony runs cannot weaken pass bars.
+- Added evidence-based profile recommendation: `harness profiles --recommend "prompt"` and the matrix `adaptive` selector now aggregate run history (`src/history.ts`) and prefer the cheapest profile whose measured completion rate is within tolerance of the best, falling back to the keyword heuristic when history is thin.
+- Added `harness eval roi`: a ceremony ROI report grouping run history by generator provider and ceremony level (completion rate, first-round pass rate, repair rounds, tasks/run, negotiation approval rate) with findings on whether ceremony pays for itself.
+- Added the fixed benchmark suite (`evals/benchmark-suite.json`, `harness eval matrix --suite`): 8 prompts across frontend, backend, and CLI — including three new greenfield `bench-*` cases on `evals/fixtures/greenfield` — run across the ceremony ladder, with suite results frozen under `benchmarks/frozen/`.
+- Added `--runtime-mode` CLI flag and a regression test proving minimal-ceremony runs still get independent verdicts, repair directives, and bootstrapped plan artifacts.
+- Added `--blind-judge true` (redacts profile, provider, and model identifiers from pairwise judge prompts so judges cannot recognize which model produced a run) and `--judge-model <model>` (override the judge model, enabling non-participant judging in cross-model comparisons).
+- Added deterministic behavior probes to the `bench-cli-task-tracker` and `bench-backend-notes-api` cases: prompts now pin the executable/server entry points, and objective checks invoke the real CLI and live HTTP endpoints so coverage gaps are caught by gates instead of judge taste.
+- Added `bench-hard-ledger-undo`, a hard-tier discriminator case on a new `evals/fixtures/eventlog` fixture: an existing event-sourced codebase with two seeded bugs described only as symptoms (string-seq replay ordering, reducer resurrecting removed items), a compensating-event `undo` feature under an append-only invariant, golden-file v1 compatibility, and a designed ambiguity (consecutive-undo semantics) for judging judgment. Probes validated to fail on the shipped fixture and pass on a corrected reference implementation.
+
+### Fixed (instruments)
+
+- Fixed `resolveObjectiveWorkspace` to prefer the executed run's workspace over the case's `workspaceFixture` when building eval packets — previously `eval compare --objective-checks true` ran behavior probes against the pristine fixture template, reporting false failures for both runs in every judged pair.
+
+### Fixed
+
+- Fixed work categorization so prompts containing "build" are no longer classified as frontend (the old pattern matched the `ui` inside `build`).
+
+### Changed
+
+- Reframed the README: the harness's premise is now "minimal ceremony, maximal verification, chosen by evidence" instead of bounded roles as a workaround for models losing the thread.
+
 ## [0.4.0] - 2026-05-09
 
 ### Added

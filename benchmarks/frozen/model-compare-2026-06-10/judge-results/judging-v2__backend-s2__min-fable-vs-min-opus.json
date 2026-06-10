@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:17:44.437Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-sonnet-4-6"
+  },
+  "order": {
+    "A": "2026-06-10T04-14-01-426Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-02-30-831Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 4
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 2
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs pass objective checks (tests and probe-http-lifecycle) and satisfy the critical requirements: four endpoints implemented, persistence proven across restart, no npm dependencies, baseline test green. Neither has a critical regression.\n\nThe runs diverge significantly on evaluationTrustworthiness.\n\nRun A produced a 5-file evidence manifest containing: (1) curl-smoke.log with full raw HTTP request/response headers and bodies for every endpoint and error path, (2) a complete TAP npm-test.log (9/9 pass), (3) server-stdout.log confirming server startup, (4) oversize-body-check.log documenting an out-of-contract edge case, and (5) evidence-summary.md. Every behavioral claim is mechanically reproducible from the curl log. The evaluator also self-calibrated at 4s — honest given that the oversized-body edge (ECONNRESET instead of 413) was out-of-spec but worth documenting. DELETE correctly returns 204.\n\nRun B produced a 2-file manifest: the npm-test.log (11/11 pass, strong) and a behavior-transcript.txt that is only 497 bytes. That 497-byte file cannot contain raw server output, HTTP headers, a kill-and-restart sequence, and multi-endpoint curl responses — it is a summary of observations, not preserved evidence. The evaluator then self-scored 5 for verificationEvidence, which is inflated: a 5 requires \"comprehensive, minimal, and highly diagnostic\" evidence, not a claim summary. This pattern — summarizing observations rather than preserving raw output, then self-scoring high — would corrupt ROI analysis across ceremony levels if replicated. DELETE returns 200 (not 204); the prompt doesn't mandate 204 and the probe accepts both, so this is not a hard failure, but it went unflagged.\n\nOn taskFulfillment and correctness, Run B's 11-test suite has breadth advantages (separate 400 sub-cases, explicit content-type test), but the absence of independent live-server HTTP verification means correctness is backed only by in-process test assertions. Run A's curl evidence independently confirms every status code and body on the wire, including a real cross-restart persistence check. Both runs earned 4 on implementationQuality since implementation structure must be inferred from test names and generator summaries rather than from direct code review in the packet. Run A earns a 4 on harnessProcessQuality for honest calibration and documented edge-case investigation; Run B earns a 3 because the inflated self-scoring on evidence quality indicates the evaluator role was not performing independent behavioral verification as intended by the harness design."
+}

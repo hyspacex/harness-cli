@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:19:14.256Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T04-14-01-426Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-02-30-831Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 5,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy the critical product requirements: tests pass, the live probe passes, no npm dependencies are reported, and persistence across restart is covered. Run A is the stronger overall run because its evidence is substantially more concrete: it includes raw TAP output, a full curl transcript with actual HTTP status lines, headers, JSON bodies, delete/fetch/error behavior, and an on-disk persistence check across restart. It also records a diagnostic non-critical oversized-body defect. Run B appears functionally complete and has 11/11 tests plus the objective probe pass, but its live API evidence is mostly a summarized behavior transcript rather than raw command/response output, and default-port behavior was inferred after EADDRINUSE rather than directly demonstrated. Both runs used generic harness-authored contracts and both had an initial generator crash, but Run A's evaluator artifacts and process are more reproducible and diagnostic. The final products are effectively tied; Run A wins on process quality and evaluation trustworthiness."
+}

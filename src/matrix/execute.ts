@@ -159,6 +159,13 @@ export function createMatrixJudgeRunner(flags: Record<string, string>): MatrixJu
     const { config } = await loadConfig(flags.config, buildOverrides(judgeFlags), {
       profile: flags['judge-profile'] || flags.profile || null,
     });
+    if (flags['judge-model']) {
+      if (options.judgeProvider === 'codex') {
+        config.codex.model = flags['judge-model'];
+      } else {
+        config.claudeSdk.model = flags['judge-model'];
+      }
+    }
     const providerRegistry = createProvider(config, {
       onStdErr: (chunk) => {
         const text = String(chunk || '').trim();

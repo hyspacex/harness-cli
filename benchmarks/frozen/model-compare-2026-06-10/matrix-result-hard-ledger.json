@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "builtAt": "2026-06-10T13:58:31.013Z",
+  "results": [
+    {
+      "caseId": "bench-hard-ledger-undo",
+      "profile": "min-opus",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/hard-ledger/isolates/bench-hard-ledger-undo/min-opus/run-root/runs/2026-06-10T13-31-04-430Z-you-are-working-in-an-existing-event-sourced-inv",
+      "packetPath": "/tmp/model-compare2/hard-ledger/packets/bench-hard-ledger-undo/min-opus/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/hard-ledger/packets/bench-hard-ledger-undo/min-opus/packet.md"
+    },
+    {
+      "caseId": "bench-hard-ledger-undo",
+      "profile": "min-fable",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/hard-ledger/isolates/bench-hard-ledger-undo/min-fable/run-root/runs/2026-06-10T13-40-12-980Z-you-are-working-in-an-existing-event-sourced-inv",
+      "packetPath": "/tmp/model-compare2/hard-ledger/packets/bench-hard-ledger-undo/min-fable/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/hard-ledger/packets/bench-hard-ledger-undo/min-fable/packet.md"
+    },
+    {
+      "caseId": "bench-hard-ledger-undo",
+      "profile": "min-gpt55",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/hard-ledger/isolates/bench-hard-ledger-undo/min-gpt55/run-root/runs/2026-06-10T13-52-29-219Z-you-are-working-in-an-existing-event-sourced-inv",
+      "packetPath": "/tmp/model-compare2/hard-ledger/packets/bench-hard-ledger-undo/min-gpt55/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/hard-ledger/packets/bench-hard-ledger-undo/min-gpt55/packet.md"
+    }
+  ],
+  "comparisons": [
+    {
+      "caseId": "bench-hard-ledger-undo",
+      "profileA": "min-fable",
+      "profileB": "min-gpt55",
+      "outDir": "/tmp/model-compare2/hard-ledger/comparisons/bench-hard-ledger-undo/min-fable-vs-min-gpt55",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-hard-ledger-undo",
+      "profileA": "min-fable",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/hard-ledger/comparisons/bench-hard-ledger-undo/min-fable-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-hard-ledger-undo",
+      "profileA": "min-gpt55",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/hard-ledger/comparisons/bench-hard-ledger-undo/min-gpt55-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    }
+  ],
+  "shipGate": {
+    "version": 1,
+    "status": "warning",
+    "ok": false,
+    "checks": [
+      {
+        "id": "all-runs-completed",
+        "status": "pass",
+        "message": "Every planned run completed successfully."
+      },
+      {
+        "id": "packets-built",
+        "status": "pass",
+        "message": "Packets were built for every run with a run directory."
+      },
+      {
+        "id": "required-objective-checks",
+        "status": "pass",
+        "message": "12 objective check result(s) passed."
+      },
+      {
+        "id": "pairwise-judging",
+        "status": "warning",
+        "message": "Comparisons are dry-run prompts only; rerun with --judge-provider for judged evidence."
+      },
+      {
+        "id": "profile-artifact-isolation",
+        "status": "pass",
+        "message": "Each packetized profile has a distinct workspace and run directory."
+      }
+    ]
+  }
+}

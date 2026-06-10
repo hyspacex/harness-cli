@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T12:53:25.567Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T03-35-41-162Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T03-47-08-492Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "A",
+  "confidence": 3,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 4
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 3
+    }
+  },
+  "criticalRegressions": [
+    "Run B's generator 'Replaced the baseline smoke test' (test/smoke.test.mjs in filesTouched); its npm-test.log and final-regression log contain 16 subtests with NO 'greenfield fixture baseline stays green' case, so the explicitly-required fixture baseline test no longer appears in the suite. Run A preserved it as test #1. Run B's probe gates still pass, so this is a process/regression concern rather than a confirmed objective-check failure."
+  ],
+  "rationale": "Both runs ship a correct, dependency-free bin/task.mjs implementing add/list/done/remove with TASKS_FILE override and clear stderr/non-zero error handling, both drive the real CLI via child-process node --test, and both pass all objective probe checks (tests, probe-add-list, probe-unknown-id-fails, probe-unknown-command-fails) with no repair loops. The products are close in functional quality and implementation cleanliness (tie on implementationQuality at 4). Run A separates on two axes. (1) Evaluation trustworthiness: Run A's evaluator independently re-ran npm test (18/18) AND captured a full manual smoke transcript showing per-path exit codes, stderr text, a store-file dump, and an explicit stdout/stderr separation check ('stdout-captured=\\\"\\\" (should be empty)'), plus root-cause file:line for a self-found low-severity bug; two frozen evidence files with manifest. Run B's verdict leans on a single npm-test.log and AC 'evidence' that points mostly at source file paths (bin/task.mjs, package.json) rather than reproduced command output — adequate but more inspection-based and less diagnostic. (2) Baseline preservation: Run A explicitly keeps the fixture baseline test green (test #1 'greenfield fixture baseline stays green'), while Run B's generator replaced test/smoke.test.mjs and its 16-test output no longer contains that baseline subtest, raising a real concern against the explicit 'fixture baseline test must remain green' requirement — though Run B's probe gates still pass, so it is not a confirmed objective failure. Net: similar correct products, but Run A has materially stronger, reproducible evidence and a cleaner relationship to the baseline requirement. Confidence is moderate because both pass all probe checks and the Run B baseline issue is ambiguous (replaced vs. broken)."
+}

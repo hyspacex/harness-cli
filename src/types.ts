@@ -17,7 +17,22 @@ export type ProviderName = 'claude-sdk' | 'codex' | 'pi';
 export type ApprovalPolicy = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
 export type AgentRole = 'researcher' | 'planner' | 'generator' | 'evaluator';
 export type RoleProviderMap = Record<AgentRole, ProviderName>;
-export type RuntimeMode = 'full' | 'flat';
+export type RuntimeMode = 'full' | 'flat' | 'minimal';
+
+/**
+ * Explicit ceremony dials. `runtimeMode` is sugar that derives a full
+ * CeremonyConfig; any dial set here overrides the mode-derived value.
+ * Verification gates (verdicts, frozen evidence, smoke checks, final
+ * regression) are NOT dials — they run at every ceremony level.
+ */
+export interface CeremonyConfig {
+  /** Run a separate researcher task. When false, research artifacts are bootstrapped deterministically. */
+  researcher: boolean;
+  /** Run a separate planner task. When false, plan artifacts are bootstrapped deterministically. */
+  planner: boolean;
+  /** Bilateral contract negotiation rounds. 0 = harness-authored contract with no negotiation. */
+  negotiationRounds: number;
+}
 
 // ---- SDK configuration ----
 
@@ -157,6 +172,8 @@ export interface HarnessConfig {
   provider: ProviderName;
   executionProfile: string | null;
   runtimeMode: RuntimeMode;
+  /** Partial overrides on top of the runtimeMode-derived ceremony dials. */
+  ceremony: Partial<CeremonyConfig>;
   roleProviders: RoleProviderMap;
   workspace: string;
   runRoot: string;

@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "builtAt": "2026-06-10T04:02:30.731Z",
+  "results": [
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-opus",
+      "ok": false,
+      "status": "failed",
+      "runDir": "/tmp/model-compare2/backend-s1/isolates/bench-backend-notes-api/min-opus/run-root/runs/2026-06-10T03-30-54-350Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/backend-s1/packets/bench-backend-notes-api/min-opus/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/backend-s1/packets/bench-backend-notes-api/min-opus/packet.md",
+      "error": "Claude Code process exited with code 1"
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-fable",
+      "ok": false,
+      "status": "failed",
+      "runDir": "/tmp/model-compare2/backend-s1/isolates/bench-backend-notes-api/min-fable/run-root/runs/2026-06-10T03-47-21-876Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/backend-s1/packets/bench-backend-notes-api/min-fable/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/backend-s1/packets/bench-backend-notes-api/min-fable/packet.md",
+      "error": "Claude Code process exited with code 1"
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profile": "min-gpt55",
+      "ok": true,
+      "status": "completed",
+      "runDir": "/tmp/model-compare2/backend-s1/isolates/bench-backend-notes-api/min-gpt55/run-root/runs/2026-06-10T03-57-59-087Z-build-a-small-rest-api-for-notes-using-only-node",
+      "packetPath": "/tmp/model-compare2/backend-s1/packets/bench-backend-notes-api/min-gpt55/packet.json",
+      "packetMarkdownPath": "/tmp/model-compare2/backend-s1/packets/bench-backend-notes-api/min-gpt55/packet.md"
+    }
+  ],
+  "comparisons": [
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "min-fable",
+      "profileB": "min-gpt55",
+      "outDir": "/tmp/model-compare2/backend-s1/comparisons/bench-backend-notes-api/min-fable-vs-min-gpt55",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "min-fable",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/backend-s1/comparisons/bench-backend-notes-api/min-fable-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    },
+    {
+      "caseId": "bench-backend-notes-api",
+      "profileA": "min-gpt55",
+      "profileB": "min-opus",
+      "outDir": "/tmp/model-compare2/backend-s1/comparisons/bench-backend-notes-api/min-gpt55-vs-min-opus",
+      "judge": "dry-run",
+      "winner": "inconclusive",
+      "confidence": 1
+    }
+  ],
+  "shipGate": {
+    "version": 1,
+    "status": "fail",
+    "ok": false,
+    "checks": [
+      {
+        "id": "all-runs-completed",
+        "status": "fail",
+        "message": "2 run(s) failed, were missing, or did not complete."
+      },
+      {
+        "id": "packets-built",
+        "status": "pass",
+        "message": "Packets were built for every run with a run directory."
+      },
+      {
+        "id": "required-objective-checks",
+        "status": "fail",
+        "message": "1 required objective check(s) failed."
+      },
+      {
+        "id": "pairwise-judging",
+        "status": "warning",
+        "message": "Comparisons are dry-run prompts only; rerun with --judge-provider for judged evidence."
+      },
+      {
+        "id": "profile-artifact-isolation",
+        "status": "pass",
+        "message": "Each packetized profile has a distinct workspace and run directory."
+      }
+    ]
+  }
+}

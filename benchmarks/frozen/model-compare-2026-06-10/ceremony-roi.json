@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "builtAt": "2026-06-10T07:29:25.375Z",
+  "runRoot": "/tmp/model-compare2/combined",
+  "totalRuns": 22,
+  "rows": [
+    {
+      "generatorProvider": "claude-sdk",
+      "ceremonyLevel": "minimal",
+      "profiles": [
+        "min-fable",
+        "min-opus"
+      ],
+      "runs": 12,
+      "completionRate": 1,
+      "firstRoundPassRate": 1,
+      "avgRepairRoundsToPass": 0,
+      "avgTasksStarted": 2.6666666666666665,
+      "negotiationApprovalRate": null,
+      "finalRegressionFailures": 0
+    },
+    {
+      "generatorProvider": "codex",
+      "ceremonyLevel": "minimal",
+      "profiles": [
+        "min-gpt55",
+        "min-gpt55-xhigh"
+      ],
+      "runs": 8,
+      "completionRate": 1,
+      "firstRoundPassRate": 1,
+      "avgRepairRoundsToPass": 0,
+      "avgTasksStarted": 2.375,
+      "negotiationApprovalRate": null,
+      "finalRegressionFailures": 0
+    },
+    {
+      "generatorProvider": "codex",
+      "ceremonyLevel": "full",
+      "profiles": [
+        "full-gpt55"
+      ],
+      "runs": 2,
+      "completionRate": 1,
+      "firstRoundPassRate": 0.6666666666666666,
+      "avgRepairRoundsToPass": 0.3333333333333333,
+      "avgTasksStarted": 18,
+      "negotiationApprovalRate": 0.75,
+      "finalRegressionFailures": 0
+    }
+  ],
+  "findings": [
+    "claude-sdk: only 1 ceremony level(s) have run history — run the benchmark suite across the ladder to compare.",
+    "codex: full ceremony vs minimal — first-round pass -33pt at +15.6 tasks/run; the extra ceremony is NOT buying a 10pt pass-rate edge — prefer minimal."
+  ]
+}

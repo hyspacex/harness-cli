@@ -3,6 +3,8 @@ import type { Backlog, EvalCriteria } from './types.js';
 export interface FlatRuntimeArtifactsInput {
   prompt: string;
   maxSprints: number;
+  /** Runtime mode recorded in the bootstrapped artifacts. Defaults to 'flat'. */
+  mode?: 'flat' | 'minimal';
 }
 
 export interface FlatRuntimeArtifacts {
@@ -18,6 +20,8 @@ export function buildFlatRuntimeArtifacts(input: FlatRuntimeArtifactsInput): Fla
   const title = summarizePrompt(prompt);
   const promptBlock = fencedBlock(prompt);
   const maxSprints = Math.max(1, Math.trunc(input.maxSprints || 1));
+  const mode = input.mode || 'flat';
+  const modeTitle = mode === 'minimal' ? 'Minimal' : 'Flat';
 
   const evalCriteria: EvalCriteria = {
     version: 1,
@@ -78,9 +82,9 @@ export function buildFlatRuntimeArtifacts(input: FlatRuntimeArtifactsInput): Fla
 
   return {
     researchBrief: [
-      '# Flat Runtime Research Brief',
+      `# ${modeTitle} Runtime Research Brief`,
       '',
-      'This run uses `runtimeMode: flat`, so no separate researcher role executed.',
+      `This run uses \`runtimeMode: ${mode}\`, so no separate researcher role executed.`,
       'The generator must treat prompt.md, repository inspection, and these bootstrap artifacts as the source of truth.',
       '',
       '## User Request',
@@ -102,7 +106,7 @@ export function buildFlatRuntimeArtifacts(input: FlatRuntimeArtifactsInput): Fla
     ].join('\n'),
     evalCriteria,
     spec: [
-      '# Flat Runtime Spec',
+      `# ${modeTitle} Runtime Spec`,
       '',
       'This profile intentionally skips separate researcher and planner task execution.',
       'The generator owns final decomposition through the sprint contract while the evaluator remains separate.',

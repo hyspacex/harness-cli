@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-hard-ledger-undo",
+  "judgedAt": "2026-06-10T14:00:46.615Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T13-40-12-980Z-you-are-working-in-an-existing-event-sourced-inv",
+    "B": "2026-06-10T13-52-29-219Z-you-are-working-in-an-existing-event-sourced-inv"
+  },
+  "evaluationSpecHash": "8ea270da696294644ad2ec0b4c754436827d0669a1a886666dd7aa7485f5c0e1",
+  "winner": "A",
+  "confidence": 4,
+  "dimensionScores": {
+    "rootCauseAnalysis": {
+      "A": 5,
+      "B": 4
+    },
+    "correctness": {
+      "A": 5,
+      "B": 4
+    },
+    "integrationCompatibility": {
+      "A": 5,
+      "B": 4
+    },
+    "verificationDepth": {
+      "A": 5,
+      "B": 3
+    },
+    "judgmentAndDocumentation": {
+      "A": 4,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs correctly root-caused the two seeded defects at the mechanism level — lexicographic string-seq sort fixed with numeric comparison, and the reducer resurrecting missing items on adjust (`|| {qty:0}`) fixed by making adjust-on-missing a replay no-op while the CLI refuses missing items. Both implement undo as appended compensation/marker events (append-only invariant respected, history preserved, exhaustion errors non-zero), add no npm deps, keep state shape and existing interfaces intact, and pass all four objective checks (tests, golden-replay, removed-stays-removed, undo-append-only) plus final regression.\n\nThe decisive difference is verification depth and evidence reproducibility. Run A shipped 16 tests and its evaluator independently reran npm test (16/16), executed 7 hand-written adversarial probes (interleaved undos, undo of a historical no-op adjust, 11-event ordering, unremove-after-unadjust, no-redo, exhaustion) saved in edge-probes.log, and proved the golden file was byte-unchanged with an explicit before/after sha (`5d98f54...`) plus an append-only prefix assertion. Evidence was frozen with a manifest; evaluator rated confidence high / evidence strong. Run B shipped 11 tests and its evaluator relied on code review plus a rerun and a semantic golden compare, with no independent adversarial probes and no explicit golden byte-unchanged sha in its own evidence; its evaluator self-rated confidence medium / evidence adequate. Run A also honestly surfaces and defers a pre-existing seq-derivation limitation, improving auditability.\n\nRun B is genuinely competent and correct (no regressions, coherent documented no-redo semantics tested), but Run A is both a stronger product (broader correct edge-case coverage) and a stronger process (deeper, more reproducible, frozen evidence). Winner: A, with high-but-not-maximal confidence since both clear every critical requirement."
+}

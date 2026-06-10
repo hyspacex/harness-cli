@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-cli-task-tracker",
+  "judgedAt": "2026-06-10T13:06:07.642Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-opus-4-8"
+  },
+  "order": {
+    "A": "2026-06-10T04-02-49-926Z-build-a-command-line-task-tracker-as-a-node-js-e",
+    "B": "2026-06-10T04-14-01-601Z-build-a-command-line-task-tracker-as-a-node-js-e"
+  },
+  "evaluationSpecHash": "d2a811f36ca537e3fedc6263c743424f8b77c7fc0d3a95f05c185d7b4432738c",
+  "winner": "A",
+  "confidence": 3,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 4
+    },
+    "correctness": {
+      "A": 4,
+      "B": 4
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "harnessProcessQuality": {
+      "A": 3,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 4,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs use identical minimal ceremony (harness-authored contract, no negotiation, identical bootstrapped plan artifacts), both pass all four objective probes, both ship a dependency-free ESM CLI at bin/task.mjs with TASKS_FILE override and child-process tests. Differentiation is in test-coverage granularity, robustness, and evaluation depth.\n\ntaskFulfillment (A4/B4): Both implement all four commands, the storage override, and error-to-stderr/non-zero behavior; verified live in both packets.\n\ncorrectness (A4/B4): Both pass tests with correct exit/stream behavior. Crucial detail: Run A's npm-test.txt shows 16 tests with each command and EACH error path as a discrete named case (missing title, unknown id, missing id, non-numeric id, unknown command, missing command, corrupt file, id-uniqueness). Run B's npm-test.log shows only 3 tests, bundling all four commands into one test and all error paths into another. The prompt explicitly demands coverage of 'every command and every error path'; Run A satisfies this far more granularly. Both tests do drive the real CLI as child processes against temp TASKS_FILE (not internal-function imports), so neither is capped at 3.\n\nimplementationQuality (A4/B3): Run A handles an existing empty file as an empty store and provides a dedicated stream-separation probe and default-path verification. Run B treats an empty existing file as invalid JSON (a real robustness trap its own evaluator surfaced via the handoff mktemp bug), and bundles tests so failures give poor diagnostics. Run A's diff is comparably tight; both are clean.\n\nharnessProcessQuality (A3/B3): Tied. Identical bootstrapped plan/contract/eval-criteria; minimal ceremony appropriate to the task. Neither ran a repair loop. Run B had a final-regression smoke log present; Run A's packet shows a generator process error/retry but recovered cleanly. Run B's evaluator noted backlog.json showed F01 'pending' yet passed — a minor traceability inconsistency. Both adequate, neither exceptional.\n\nevaluationTrustworthiness (A4/B4): Both back verdicts with reproducible command evidence and frozen manifests. Run A's evaluator (high/strong) reproduced 16/16, ran a full manual smoke over all paths, a stream-separation probe, and extra edge probes — very thorough but found no defects. Run B's evaluator (medium/adequate) was appropriately skeptical and found a genuine reproducible low-severity defect (handoff mktemp creating an invalid empty file), with a clear evidence file and repair plan — exactly the kind of honest QA the rubric rewards, which keeps B at 4 despite thinner overall coverage. However that defect was left unrepaired.\n\nNet: Run A wins on the most prompt-central dimension (discrete coverage of every command and every error path: 16 vs 3 tests) plus better empty-file robustness and stronger stream evidence. Run B's offsetting strength is a real bug-find. Final product edge to A; harness process is a tie. Winner A with modest confidence."
+}

@@ -39,9 +39,28 @@ export const BUILTIN_EXECUTION_PROFILES: ExecutionProfile[] = [
   {
     name: 'full-harness',
     description: 'Use the configured provider mix with the full research, plan, contract, build, eval, and repair loop.',
-    tags: ['baseline', 'full-loop'],
+    tags: ['baseline', 'full-loop', 'ceremony-ladder'],
     useWhen: ['You want the existing harness behavior without profile overrides.'],
     config: {},
+  },
+  {
+    name: 'flat',
+    description: 'Middle rung of the ceremony ladder: bootstrapped research/plan artifacts, generator-drafted contract with one evaluator review round.',
+    tags: ['ceremony-ladder', 'flat-runtime'],
+    useWhen: ['Strong generator models that do not need separate research/planning roles but still benefit from contract review.'],
+    config: {
+      runtimeMode: 'flat',
+      maxNegotiationRounds: 1,
+    },
+  },
+  {
+    name: 'minimal',
+    description: 'Bottom rung of the ceremony ladder: generator plus harness-enforced gates only — bootstrapped plan artifacts, harness-authored contract, zero negotiation. Verdicts, frozen evidence, smoke gates, and final regression stay mandatory.',
+    tags: ['ceremony-ladder', 'minimal-runtime'],
+    useWhen: ['Frontier models where role ceremony is measured overhead; trust comes from harness verification, not decomposition.'],
+    config: {
+      runtimeMode: 'minimal',
+    },
   },
   {
     name: 'balanced',
@@ -222,24 +241,28 @@ export function resolveExecutionProfile(
   return profile;
 }
 
-export function recommendExecutionProfiles(input: { category?: string | null; prompt?: string | null }): string[] {
+export type WorkCategory = 'frontend' | 'cli' | 'backend' | 'general';
+
+export function categorizeWork(input: { category?: string | null; prompt?: string | null }): WorkCategory {
   const category = String(input.category || '').toLowerCase();
   const prompt = String(input.prompt || '').toLowerCase();
   const haystack = `${category} ${prompt}`;
 
-  if (category === 'frontend' || /ui|frontend|dashboard|browser|visual|accessib/.test(haystack)) {
-    return ['fast', 'visual-qa'];
+  if (category === 'frontend' || /\bui\b|frontend|dashboard|browser|visual|accessib/.test(haystack)) {
+    return 'frontend';
   }
-
   if (category === 'cli' || /cli|command|terminal|developer tool|harness/.test(haystack)) {
-    return ['fast', 'balanced'];
+    return 'cli';
   }
-
   if (category === 'backend' || /api|server|database|schema/.test(haystack)) {
-    return ['fast', 'balanced'];
+    return 'backend';
   }
+  return 'general';
+}
 
-  return ['fast', 'balanced'];
+/** Keyword-heuristic fallback used when no run history evidence is available. */
+export function recommendExecutionProfiles(input: { category?: string | null; prompt?: string | null }): string[] {
+  return categorizeWork(input) === 'frontend' ? ['fast', 'visual-qa'] : ['fast', 'balanced'];
 }
 
 export function expandExecutionProfileSelection(

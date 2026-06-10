@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "id": "bench-backend-notes-api",
+  "title": "Backend: notes REST API on Node built-ins",
+  "category": "backend",
+  "prompt": "Build a small REST API for notes using only Node.js built-in modules (no npm dependencies). The server entry point must be src/server.mjs, started with `node src/server.mjs`, listening on the PORT environment variable (default 3000). Support POST /notes (create — must return HTTP 201 with the created note as JSON including its `id`), GET /notes (list), GET /notes/:id (fetch one), and DELETE /notes/:id. Persist notes to a JSON file so data survives a server restart. Return JSON errors with correct status codes: 404 for missing notes and 400 for invalid request bodies. Cover create, list, fetch, delete, persistence-across-restart, and the error paths with node --test tests that start the server on an ephemeral port.",
+  "workspaceFixture": "evals/fixtures/greenfield",
+  "harnessConfig": {
+    "maxSprints": 3,
+    "maxRepairRounds": 2,
+    "smoke": {
+      "test": "npm test"
+    }
+  },
+  "objectiveChecks": [
+    {
+      "id": "tests",
+      "argv": ["npm", "test"],
+      "cwd": ".",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "probe-http-lifecycle",
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {spawn} from 'node:child_process';\nconst port = 34571;\nconst child = spawn('node', ['src/server.mjs'], {env: {...process.env, PORT: String(port)}, stdio: 'ignore'});\nconst base = 'http://127.0.0.1:' + port;\nlet ok = false;\ntry {\n  let up = false;\n  for (let i = 0; i < 50 && !up; i++) { try { await fetch(base + '/notes'); up = true; } catch { await new Promise(r => setTimeout(r, 200)); } }\n  if (!up) throw new Error('server never responded on PORT');\n  const create = await fetch(base + '/notes', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({title: 'probe note', body: 'probe body'})});\n  if (create.status !== 201) throw new Error('create expected 201, got ' + create.status);\n  const created = await create.json();\n  if (!created || created.id === undefined) throw new Error('create response missing id');\n  const list = await (await fetch(base + '/notes')).json();\n  if (!JSON.stringify(list).includes('probe note')) throw new Error('list missing created note');\n  const got = await fetch(base + '/notes/' + created.id);\n  if (got.status !== 200) throw new Error('get expected 200, got ' + got.status);\n  const del = await fetch(base + '/notes/' + created.id, {method: 'DELETE'});\n  if (![200, 204].includes(del.status)) throw new Error('delete expected 200/204, got ' + del.status);\n  const missing = await fetch(base + '/notes/' + created.id);\n  if (missing.status !== 404) throw new Error('expected 404 after delete, got ' + missing.status);\n  const bad = await fetch(base + '/notes', {method: 'POST', headers: {'content-type': 'application/json'}, body: '{'});\n  if (bad.status !== 400) throw new Error('invalid body expected 400, got ' + bad.status);\n  ok = true;\n} finally { child.kill('SIGTERM'); }\nif (!ok) process.exit(1);\nconsole.log('PROBE_OK');"
+      ],
+      "cwd": ".",
+      "timeoutMs": 60000,
+      "outputIncludes": ["PROBE_OK"]
+    }
+  ],
+  "judgeFocus": [
+    "HTTP correctness (status codes, JSON bodies, error paths)",
+    "persistence actually survives a restart in tests",
+    "no npm dependencies introduced",
+    "evaluator evidence quality for API behavior"
+  ],
+  "judgeRubric": {
+    "version": 1,
+    "scale": {
+      "1": "Fails the dimension or has no usable evidence.",
+      "2": "Has major gaps, regressions, or mostly claim-based evidence.",
+      "3": "Acceptable but incomplete, noisy, or only partially evidenced.",
+      "4": "Strong result with minor gaps or limited missing evidence.",
+      "5": "Excellent result with complete behavior and strong evidence."
+    },
+    "criticalRequirements": [
+      "All four endpoints must work with correct status codes and JSON bodies through src/server.mjs honoring PORT.",
+      "Notes must survive a server restart via file persistence, proven by a test.",
+      "The solution must use only Node.js built-in modules.",
+      "The fixture baseline test must remain green.",
+      "The probe-http-lifecycle objective check must pass; it exercises the live API."
+    ],
+    "dimensions": [
+      {
+        "id": "taskFulfillment",
+        "weight": "critical",
+        "description": "How completely the final workspace implements the four endpoints, persistence, and error handling described in the prompt."
+      },
+      {
+        "id": "correctness",
+        "weight": "critical",
+        "description": "Whether tests pass, status codes and bodies are right, persistence works across restart, and edge cases are handled without regressions."
+      },
+      {
+        "id": "implementationQuality",
+        "weight": "high",
+        "description": "Maintainability, clear separation of server/storage/routing concerns, small focused diff, and meaningful test coverage."
+      },
+      {
+        "id": "harnessProcessQuality",
+        "weight": "high",
+        "description": "Quality of planning artifacts, contract specificity, and repair-loop behavior relative to the ceremony level used."
+      },
+      {
+        "id": "evaluationTrustworthiness",
+        "weight": "high",
+        "description": "Whether verdicts are backed by reproducible command evidence rather than claims."
+      }
+    ],
+    "scoringNotes": [
+      "Do not change this rubric based on run-generated eval criteria or contracts.",
+      "A run that adds npm dependencies fails the built-ins-only critical requirement.",
+      "Prefer concrete test output evidence over implementation claims."
+    ]
+  },
+  "notes": "Part of the ceremony-ladder benchmark suite. Designed to compare ceremony levels and providers on identical backend work."
+}

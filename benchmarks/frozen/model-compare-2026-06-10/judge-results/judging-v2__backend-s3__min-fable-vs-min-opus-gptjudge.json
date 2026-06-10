@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:30:22.948Z",
+  "judge": {
+    "provider": "codex",
+    "model": "gpt-5.5"
+  },
+  "order": {
+    "A": "2026-06-10T04-43-46-759Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-36-58-324Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "B",
+  "confidence": 1,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 5,
+      "B": 5
+    },
+    "correctness": {
+      "A": 4,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 4
+    },
+    "evaluationTrustworthiness": {
+      "A": 5,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [],
+  "rationale": "Both runs satisfy the critical API requirements: built-in modules only, src/server.mjs honoring PORT, CRUD endpoints, JSON 400/404 errors, restart persistence, green baseline tests, and passing probe-http-lifecycle checks. Run B edges out Run A on final product correctness because its evidence shows all required behavior plus 12 passing node --test tests and no reproduced contract-level defect, while Run A's evaluator found a real write-queue poisoning bug after a persistence write failure that leaves later mutations returning 500 until restart. That bug is outside the core happy path, so Run A still scores strongly. Run A has slightly stronger evaluation trustworthiness because it includes especially diagnostic independent evidence, including a clean persistence restart transcript with the port confirmed closed and a reproduced robustness bug; Run B's evaluator initially hit a stale foreign server on a fixed port before correcting the run, which is transparent but makes the evidence trail a bit noisier. Harness process quality is effectively tied: both used generic harness-authored contracts with limited prompt-specific acceptance criteria, no repair loop, and good progress/handoff artifacts."
+}

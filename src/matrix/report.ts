@@ -12,7 +12,7 @@ import {
   type HarnessEvalCase,
 } from '../evals.js';
 import type { ProviderName } from '../types.js';
-import { readJson, slugify, writeJson, writeText } from '../utils.js';
+import { ensureDir, readJson, slugify, writeJson, writeText } from '../utils.js';
 import type {
   MatrixComparisonResult,
   MatrixGateStatus,
@@ -124,6 +124,22 @@ export async function reportEvalMatrix(
 export async function writeMatrixResult(outDir: string, result: MatrixResultFile): Promise<void> {
   await writeJson(path.join(outDir, 'matrix-result.json'), result);
   await writeText(path.join(outDir, 'matrix-result.md'), renderMatrixResultMarkdown(result));
+  await freezeSuiteResult(outDir, result);
+}
+
+/** Benchmark-suite matrix results are additionally frozen under benchmarks/frozen/ for cross-run comparison. */
+async function freezeSuiteResult(outDir: string, result: MatrixResultFile): Promise<void> {
+  const plan = await readJson<MatrixPlanFile | null>(path.join(outDir, 'matrix-plan.json'), null);
+  if (!plan?.suiteId) {
+    return;
+  }
+
+  const frozenDir = path.resolve('benchmarks', 'frozen', slugify(plan.suiteId), slugify(plan.builtAt));
+  await ensureDir(frozenDir);
+  await writeJson(path.join(frozenDir, 'matrix-plan.json'), plan);
+  await writeJson(path.join(frozenDir, 'matrix-result.json'), result);
+  await writeText(path.join(frozenDir, 'matrix-result.md'), renderMatrixResultMarkdown(result));
+  console.log(`Frozen benchmark results: ${frozenDir}`);
 }
 
 function renderMatrixResultMarkdown(result: MatrixResultFile): string {
@@ -320,7 +336,9 @@ export async function writeMatrixComparisons(options: {
       for (let j = i + 1; j < runs.length; j += 1) {
         const runA = runs[i];
         const runB = runs[j];
-        const prompt = buildPairwiseJudgePrompt(runA.evalCase, runA.packet, runB.packet);
+        const prompt = buildPairwiseJudgePrompt(runA.evalCase, runA.packet, runB.packet, {
+          blind: flagEnabled(options.flags, 'blind-judge'),
+        });
         const comparisonDir = path.join(
           options.outDir,
           'comparisons',

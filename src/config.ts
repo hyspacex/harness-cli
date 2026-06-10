@@ -33,6 +33,7 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   provider: 'claude-sdk',
   executionProfile: null,
   runtimeMode: 'full',
+  ceremony: {},
   roleProviders: buildUniformRoleProviders('claude-sdk'),
   workspace: '.',
   runRoot: '.harness',

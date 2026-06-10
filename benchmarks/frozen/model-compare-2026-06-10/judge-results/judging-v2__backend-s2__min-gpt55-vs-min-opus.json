@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "caseId": "bench-backend-notes-api",
+  "judgedAt": "2026-06-10T13:14:15.087Z",
+  "judge": {
+    "provider": "claude-sdk",
+    "model": "claude-fable-5"
+  },
+  "order": {
+    "A": "2026-06-10T04-24-52-084Z-build-a-small-rest-api-for-notes-using-only-node",
+    "B": "2026-06-10T04-02-30-831Z-build-a-small-rest-api-for-notes-using-only-node"
+  },
+  "evaluationSpecHash": "5c460d8eeb855316c62f2616841abafd17431b528b25c16de51d387ae87275d7",
+  "winner": "B",
+  "confidence": 4,
+  "dimensionScores": {
+    "taskFulfillment": {
+      "A": 4,
+      "B": 5
+    },
+    "correctness": {
+      "A": 3,
+      "B": 5
+    },
+    "implementationQuality": {
+      "A": 3,
+      "B": 4
+    },
+    "harnessProcessQuality": {
+      "A": 4,
+      "B": 3
+    },
+    "evaluationTrustworthiness": {
+      "A": 3,
+      "B": 4
+    }
+  },
+  "criticalRegressions": [
+    "Run A's progress.md states it 'Replaced the baseline smoke test' with new coverage; its final test run shows only 2 tests, neither of which is the fixture baseline. Run B's TAP log explicitly shows 'greenfield fixture baseline stays green' passing (test 11 of 11). The locked critical requirement that the fixture baseline test remain green is therefore evidenced only in Run B; in Run A the baseline test appears removed/overwritten even though the aggregate 'tests' objective check passed.",
+    "Run B had a generator process crash ('Code process exited with code 1', tasksStarted=2/tasksFinished=1) requiring a resume ~1 hour later. The harness recovered correctly and no work was lost, but it is a process-reliability blemish, not a product regression."
+  ],
+  "rationale": "Both runs completed at the same minimal ceremony level (harness-authored contract, bootstrapped plan artifacts), and both passed the two objective checks (tests, probe-http-lifecycle), so both final products exercise the live API correctly. The differentiation is in evidence depth, test coverage, and the baseline test. Run B's frozen evidence contains an 11/11 TAP log with one granular test per required behavior (POST 201 with id, list, fetch, delete, persistence-across-restart, GET/DELETE 404s, invalid-JSON 400, missing-title 400, content-type) PLUS the untouched fixture baseline test still green, and its evaluator went beyond the suite: live curl against a running node src/server.mjs, true cross-restart persistence verified with two separate OS processes sharing the data file, and on-disk notes.json inspection, saved as a behavior transcript. Run A's frozen evidence is a single npm-test.log with only 2 coarse tests; coverage of the required paths is bundled into two assertions, the evaluator's only command was npm test (self-rated medium confidence / adequate evidence), and crucially A's own progress.md admits it replaced the baseline smoke test — so the 'fixture baseline must remain green' critical requirement is unevidenced for A. On implementation quality, B's artifacts describe clean separation (createServer/startServer exports, atomic temp+rename writes with a serialized write queue, isolated temp data files per test) while A is a compact server with thin tests and a noisier validation history (an initial test hang from process-cleanup bugs, leftover node processes). Process-wise, A was cleaner (single clean generator pass, no errors) whereas B logged a generator crash and resume, which costs B on harnessProcessQuality but does not affect the final product. B's evaluator scores of mostly 5s look slightly generous and its behavior transcript is summarized rather than raw output, capping evaluationTrustworthiness at 4, but it is still clearly better-evidenced than A's single test log. Overall winner: B on product, correctness, and evidence; A wins only on process smoothness."
+}
