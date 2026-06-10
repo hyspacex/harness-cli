@@ -1,5 +1,7 @@
 # Pi Runtime Boundary Plan
 
+> **Historical document** (May 2026). This plan was executed and then superseded by the v0.5.0 core/lab restructure: paths written here as `src/evals.ts`, `src/matrix/*`, `src/artifacts/*`, and `src/providers/*` now live under `src/core/` and `src/lab/`, and `harness eval matrix` is now `harness lab matrix`. See `ARCHITECTURE.md` for the current layout. Kept for the rationale and decision record.
+
 This plan keeps Harness CLI as one repo while drawing a hard internal boundary between:
 
 - System A: the runtime harness that runs agents, manages sprint state, writes contracts/evals/verdicts, and resumes sessions.
