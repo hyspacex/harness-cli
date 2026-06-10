@@ -4,11 +4,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { buildEvalRunPacket } from '../dist/evals.js';
-import { PiProvider } from '../dist/providers/pi.js';
-import { createProvider } from '../dist/providers/index.js';
-import { DEFAULT_CONFIG } from '../dist/config.js';
-import { resolveExecutionProfile } from '../dist/profiles.js';
+import { buildEvalRunPacket } from '../dist/lab/packet.js';
+import { PiProvider } from '../dist/core/providers/pi.js';
+import { createProvider } from '../dist/core/providers/index.js';
+import { DEFAULT_CONFIG } from '../dist/core/config.js';
+import { resolveExecutionProfile } from '../dist/core/profiles.js';
 
 class FakePiTransport {
   constructor(result) {

@@ -1,18 +1,19 @@
 import path from 'node:path';
-import { flagEnabled, parseProviderName } from '../cli-flags.js';
-import { findLatestRunArtifactBundle } from '../artifacts/run-reader.js';
+import { flagEnabled, parseProviderName } from '../../cli-flags.js';
+import { findLatestRunArtifactBundle } from '../../core/artifacts/run-reader.js';
+import { findEvalCase, type HarnessEvalCase } from '../cases.js';
+import {
+  buildEvalRunPacket,
+  writeEvalRunPacket,
+  type EvalRunPacket,
+} from '../packet.js';
 import {
   buildDryJudgeResult,
-  buildEvalRunPacket,
   buildPairwiseJudgePrompt,
-  findEvalCase,
-  writeEvalRunPacket,
   writeJudgeComparisonArtifacts,
-  type EvalRunPacket,
-  type HarnessEvalCase,
-} from '../evals.js';
-import type { ProviderName } from '../types.js';
-import { ensureDir, readJson, slugify, writeJson, writeText } from '../utils.js';
+} from '../judge.js';
+import type { ProviderName } from '../../core/types.js';
+import { ensureDir, readJson, slugify, writeJson, writeText } from '../../core/utils.js';
 import type {
   MatrixComparisonResult,
   MatrixGateStatus,

@@ -4,14 +4,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {
-  buildEvalRunPacket,
-  buildPairwiseJudgePrompt,
-  computeEvaluationSpecHash,
-  findEvalCase,
-  listEvalCases,
-  redactSensitiveText,
-} from '../dist/evals.js';
+import { computeEvaluationSpecHash, findEvalCase, listEvalCases } from '../dist/lab/cases.js';
+import { buildEvalRunPacket, redactSensitiveText } from '../dist/lab/packet.js';
+import { buildPairwiseJudgePrompt } from '../dist/lab/judge.js';
 
 function makePacket(evalCase, specHash) {
   return {

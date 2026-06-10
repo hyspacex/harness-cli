@@ -4,12 +4,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { classifyCeremonyLevel, parseRuntimeMode, resolveCeremony } from '../dist/ceremony.js';
+import { classifyCeremonyLevel, parseRuntimeMode, resolveCeremony } from '../dist/core/ceremony.js';
 import { buildOverrides } from '../dist/cli-flags.js';
-import { loadConfig } from '../dist/config.js';
-import { buildHarnessAuthoredContract } from '../dist/contract-bootstrap.js';
-import { resolveExecutionProfile } from '../dist/profiles.js';
-import { deriveContractPassBarOverrides } from '../dist/utils.js';
+import { loadConfig } from '../dist/core/config.js';
+import { buildHarnessAuthoredContract } from '../dist/core/contract-bootstrap.js';
+import { resolveExecutionProfile } from '../dist/core/profiles.js';
+import { deriveContractPassBarOverrides } from '../dist/core/utils.js';
 
 async function writeTempConfig(value) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-ceremony-config-'));

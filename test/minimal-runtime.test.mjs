@@ -4,8 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { loadConfig } from '../dist/config.js';
-import { HarnessRunner } from '../dist/harness.js';
+import { loadConfig } from '../dist/core/config.js';
+import { HarnessRunner } from '../dist/core/harness.js';
 
 const ALL_ROLES = ['researcher', 'planner', 'generator', 'evaluator'];
 const PASSING_SCORES = {

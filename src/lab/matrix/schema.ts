@@ -1,5 +1,7 @@
-import type { EvalJudgeResult, EvalRunPacket, HarnessEvalCase } from '../evals.js';
-import type { HarnessConfig, ProviderName } from '../types.js';
+import type { HarnessEvalCase } from '../cases.js';
+import type { EvalJudgeResult } from '../judge.js';
+import type { EvalRunPacket } from '../packet.js';
+import type { HarnessConfig, ProviderName } from '../../core/types.js';
 
 export interface MatrixRunPlan {
   caseId: string;

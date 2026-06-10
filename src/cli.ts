@@ -1,27 +1,28 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { buildOverrides, flagEnabled, parseProviderName } from './cli-flags.js';
-import { loadConfig, writeDefaultConfig } from './config.js';
+import { loadConfig, writeDefaultConfig } from './core/config.js';
+import { findEvalCase, listEvalCases } from './lab/cases.js';
 import {
-  buildDryJudgeResult,
   buildEvalRunPacket,
-  buildPairwiseJudgePrompt,
-  findEvalCase,
-  listEvalCases,
-  normalizeJudgeResult,
-  parseJudgeJson,
   redactSensitiveText,
   writeEvalRunPacket,
+} from './lab/packet.js';
+import {
+  buildDryJudgeResult,
+  buildPairwiseJudgePrompt,
+  normalizeJudgeResult,
+  parseJudgeJson,
   writeJudgeComparisonArtifacts,
-} from './evals.js';
-import { buildCeremonyRoiReport, renderCeremonyRoiMarkdown } from './ceremony-roi.js';
-import { runEvalMatrix } from './eval-matrix.js';
-import { HarnessRunner } from './harness.js';
-import { loadRunHistory, recommendProfilesWithEvidence } from './history.js';
-import { listExecutionProfiles } from './profiles.js';
-import { createProvider } from './providers/index.js';
-import { ensureDir, listDirectories, nowIso, readJson, slugify, writeJson, writeText } from './utils.js';
-import type { HarnessConfig, ProviderName, RunState } from './types.js';
+} from './lab/judge.js';
+import { buildCeremonyRoiReport, renderCeremonyRoiMarkdown } from './core/ceremony-roi.js';
+import { runEvalMatrix } from './lab/eval-matrix.js';
+import { HarnessRunner } from './core/harness.js';
+import { loadRunHistory, recommendProfilesWithEvidence } from './core/history.js';
+import { listExecutionProfiles } from './core/profiles.js';
+import { createProvider } from './core/providers/index.js';
+import { ensureDir, listDirectories, nowIso, readJson, slugify, writeJson, writeText } from './core/utils.js';
+import type { HarnessConfig, ProviderName, RunState } from './core/types.js';
 
 async function main(): Promise<void> {
   const { command, positionals, flags } = parseArgv(process.argv.slice(2));

@@ -1,17 +1,17 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buildOverrides, flagEnabled } from '../cli-flags.js';
-import { loadConfig } from '../config.js';
+import { buildOverrides, flagEnabled } from '../../cli-flags.js';
+import { loadConfig } from '../../core/config.js';
 import {
   DEFAULT_BENCHMARK_SUITE_PATH,
   findEvalCase,
   listEvalCases,
   readBenchmarkSuite,
   type HarnessEvalCase,
-} from '../evals.js';
-import { recommendProfilesWithEvidence } from '../history.js';
-import { expandExecutionProfileSelection, resolveExecutionProfile } from '../profiles.js';
-import type { HarnessConfig } from '../types.js';
+} from '../cases.js';
+import { recommendProfilesWithEvidence } from '../../core/history.js';
+import { expandExecutionProfileSelection, resolveExecutionProfile } from '../../core/profiles.js';
+import type { HarnessConfig } from '../../core/types.js';
 import {
   deepMerge,
   ensureDir,
@@ -19,7 +19,7 @@ import {
   slugify,
   writeJson,
   writeText,
-} from '../utils.js';
+} from '../../core/utils.js';
 import type {
   MatrixPlanFile,
   MatrixRunPlan,

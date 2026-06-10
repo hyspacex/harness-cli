@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildFlatRuntimeArtifacts } from '../dist/flat-runtime.js';
-import { validateBacklog, validateBacklogSprintBudget } from '../dist/utils.js';
+import { buildFlatRuntimeArtifacts } from '../dist/core/flat-runtime.js';
+import { validateBacklog, validateBacklogSprintBudget } from '../dist/core/utils.js';
 
 test('flat runtime artifacts preserve canonical planning shape without role execution', () => {
   const artifacts = buildFlatRuntimeArtifacts({

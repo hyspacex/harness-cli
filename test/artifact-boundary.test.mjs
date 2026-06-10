@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const runtimeImportPattern = /from\s+['"](?:\.\.\/|\.)?(?:harness|prompts|types)\.js['"]|from\s+['"](?:\.\.\/|\.)?providers\//;
-const auditRuntimeImportPattern = /from\s+['"]\.\/(?:harness|prompts|types)\.js['"]|from\s+['"]\.\/providers\//;
+const auditRuntimeImportPattern = /from\s+['"](?:\.\.\/)+core\/(?:harness|prompts|types)\.js['"]|from\s+['"](?:\.\.\/)+core\/providers\//;
 
 async function listSourceFiles(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -21,7 +21,7 @@ async function listSourceFiles(dir) {
 }
 
 test('artifact schema and readers do not import runtime internals', async () => {
-  const files = await listSourceFiles(path.resolve('src/artifacts'));
+  const files = await listSourceFiles(path.resolve('src/core/artifacts'));
   assert.ok(files.length >= 2);
 
   for (const file of files) {
@@ -35,7 +35,7 @@ test('artifact schema and readers do not import runtime internals', async () => 
 });
 
 test('eval packet builder reads artifacts instead of runtime state', async () => {
-  const source = await fs.readFile(path.resolve('src/evals.ts'), 'utf8');
+  const source = await fs.readFile(path.resolve('src/lab/packet.ts'), 'utf8');
 
   assert.doesNotMatch(source, auditRuntimeImportPattern);
   assert.doesNotMatch(source, /\bRunState\b/);
@@ -43,15 +43,15 @@ test('eval packet builder reads artifacts instead of runtime state', async () =>
 });
 
 test('matrix report module does not import runtime execution internals', async () => {
-  const source = await fs.readFile(path.resolve('src/matrix/report.ts'), 'utf8');
+  const source = await fs.readFile(path.resolve('src/lab/matrix/report.ts'), 'utf8');
 
-  assert.doesNotMatch(source, /from\s+['"]\.\.\/harness\.js['"]/);
-  assert.doesNotMatch(source, /from\s+['"]\.\.\/prompts\.js['"]/);
-  assert.doesNotMatch(source, /from\s+['"]\.\.\/providers\//);
+  assert.doesNotMatch(source, /from\s+['"](?:\.\.\/)+(?:core\/)?harness\.js['"]/);
+  assert.doesNotMatch(source, /from\s+['"](?:\.\.\/)+(?:core\/)?prompts\.js['"]/);
+  assert.doesNotMatch(source, /from\s+['"](?:\.\.\/)+(?:core\/)?providers\//);
 });
 
 test('eval-matrix wrapper lazy-loads runtime execution', async () => {
-  const source = await fs.readFile(path.resolve('src/eval-matrix.ts'), 'utf8');
+  const source = await fs.readFile(path.resolve('src/lab/eval-matrix.ts'), 'utf8');
 
   assert.doesNotMatch(source, /from\s+['"]\.\/matrix\/execute\.js['"]/);
   assert.match(source, /import\(['"]\.\/matrix\/execute\.js['"]\)/);

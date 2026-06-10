@@ -4,8 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { loadConfig } from '../dist/config.js';
-import { expandExecutionProfileSelection, listExecutionProfiles, resolveExecutionProfile } from '../dist/profiles.js';
+import { loadConfig } from '../dist/core/config.js';
+import { expandExecutionProfileSelection, listExecutionProfiles, resolveExecutionProfile } from '../dist/core/profiles.js';
 
 async function writeTempConfig(value) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-profile-config-'));

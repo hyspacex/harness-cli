@@ -1,14 +1,11 @@
 import path from 'node:path';
-import { buildOverrides, parseProviderName } from '../cli-flags.js';
-import { loadConfig } from '../config.js';
-import {
-  normalizeJudgeResult,
-  parseJudgeJson,
-  redactSensitiveText,
-} from '../evals.js';
-import { HarnessRunner } from '../harness.js';
-import { createProvider } from '../providers/index.js';
-import type { ProviderName } from '../types.js';
+import { buildOverrides, parseProviderName } from '../../cli-flags.js';
+import { loadConfig } from '../../core/config.js';
+import { normalizeJudgeResult, parseJudgeJson } from '../judge.js';
+import { redactSensitiveText } from '../packet.js';
+import { HarnessRunner } from '../../core/harness.js';
+import { createProvider } from '../../core/providers/index.js';
+import type { ProviderName } from '../../core/types.js';
 import type { MatrixJudgeRunner, MatrixRunResult, PacketizedMatrixRun, PlannedMatrixRun } from './schema.js';
 import {
   buildMatrixShipGate,

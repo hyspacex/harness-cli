@@ -7,7 +7,7 @@ import {
   hasPendingFeatures,
   resolvePass,
   validateBacklogSprintBudget,
-} from '../dist/utils.js';
+} from '../dist/core/utils.js';
 
 const evalCriteria = {
   universalCriteria: {

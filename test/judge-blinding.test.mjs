@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { blindJudgeText, buildPairwiseJudgePrompt } from '../dist/evals.js';
+import { blindJudgeText, buildPairwiseJudgePrompt } from '../dist/lab/judge.js';
 
 const RUBRIC = {
   version: 1,
@@ -69,7 +69,7 @@ test('buildPairwiseJudgePrompt blind option redacts both packets', () => {
 });
 
 test('objective checks run in the executed workspace, not the case fixture', async () => {
-  const { resolveObjectiveWorkspace } = await import('../dist/evals.js');
+  const { resolveObjectiveWorkspace } = await import('../dist/lab/objective-checks.js');
   const evalCase = { workspaceFixture: 'evals/fixtures/greenfield' };
 
   assert.match(

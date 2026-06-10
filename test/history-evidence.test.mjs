@@ -4,13 +4,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { buildCeremonyRoiReport, renderCeremonyRoiMarkdown } from '../dist/ceremony-roi.js';
+import { buildCeremonyRoiReport, renderCeremonyRoiMarkdown } from '../dist/core/ceremony-roi.js';
 import {
   ceremonyLevelForProfile,
   loadRunHistory,
   recommendProfilesWithEvidence,
   summarizeProfileEvidence,
-} from '../dist/history.js';
+} from '../dist/core/history.js';
 
 const BACKEND_PROMPT = 'Create a REST API server for invoices with a database schema.';
 

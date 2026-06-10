@@ -1,5 +1,5 @@
-import { parseRuntimeMode } from './ceremony.js';
-import type { HarnessConfig, ProviderName } from './types.js';
+import { parseRuntimeMode } from './core/ceremony.js';
+import type { HarnessConfig, ProviderName } from './core/types.js';
 
 export function buildOverrides(flags: Record<string, string>): Partial<HarnessConfig> {
   const overrides: Partial<HarnessConfig> = {};

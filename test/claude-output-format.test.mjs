@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildClaudeTaskOutputFormat } from '../dist/providers/claude-sdk.js';
+import { buildClaudeTaskOutputFormat } from '../dist/core/providers/claude-sdk.js';
 
 function requiredFor(kind, label) {
   const outputFormat = buildClaudeTaskOutputFormat({ kind, label });
