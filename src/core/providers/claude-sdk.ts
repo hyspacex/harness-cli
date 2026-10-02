@@ -36,74 +36,9 @@ export class ClaudeSdkProvider implements ProviderRuntime {
   async runTask(task: TaskDefinition): Promise<TaskResult> {
     const options = this.resolveOptionsForTask(task);
 
-    let assistantText = '';
-    let resultText = '';
-    let structuredOutput: Record<string, unknown> | null = null;
-    let failureMessage: string | null = null;
-    let claudeCodeVersion: string | undefined;
-    const responseModels = new Set<string>();
-    let sessionId: string | undefined;
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for await (const message of query({ prompt: task.prompt, options } as any)) {
-        const msg = message as Record<string, unknown>;
-
-        if (msg.type === 'system' && msg.subtype === 'init') {
-          sessionId = msg.session_id as string;
-          claudeCodeVersion = msg.claude_code_version as string;
-        }
-
-        if (msg.type === 'assistant') {
-          const assistant = msg.message as Record<string, unknown>;
-          if (typeof assistant?.model === 'string') responseModels.add(assistant.model);
-          const content = assistant?.content;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              const b = block as Record<string, unknown>;
-              if (b.type === 'text') {
-                assistantText += b.text as string;
-              }
-              if (b.type === 'tool_use') {
-                this.onUpdate({ sessionUpdate: 'tool_call', title: b.name as string }, task);
-              }
-            }
-          }
-        }
-
-        if (msg.type === 'result' && msg.subtype === 'success') {
-          resultText = (msg.result as string) || '';
-          if (isPlainObject(msg.structured_output)) {
-            structuredOutput = msg.structured_output;
-          }
-        }
-
-        failureMessage = claudeResultError(msg) || failureMessage;
-      }
-    } catch (error) {
-      if (failureMessage) throw new Error(`Claude Agent SDK: ${failureMessage}`);
-      // SDK process crashed — use whatever we collected so far.
-      const partialText = (resultText || assistantText).trim();
-      if (partialText) {
-        const parsed = extractJsonObject(partialText);
-        if (parsed) {
-          return { rawText: partialText, parsed, meta: { sessionId, crashed: true } };
-        }
-      }
-      throw error;
-    }
-
-    if (failureMessage) {
-      throw new Error(`Claude Agent SDK: ${failureMessage}`);
-    }
-
-    const rawText = (resultText || assistantText).trim();
-
-    return {
-      rawText,
-      parsed: structuredOutput || extractJsonObject(rawText),
-      meta: { sessionId, structuredOutput: !!structuredOutput, claudeCodeVersion, responseModels: [...responseModels] },
-    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return collectClaudeTaskResult(query({ prompt: task.prompt, options } as any),
+      (update) => this.onUpdate(update, task));
   }
 
   /**
@@ -166,6 +101,77 @@ export class ClaudeSdkProvider implements ProviderRuntime {
 
     return options;
   }
+}
+
+/** Consume the SDK stream; only a terminal successful result completes a task. */
+export async function collectClaudeTaskResult(
+  messages: AsyncIterable<unknown>,
+  onUpdate: (update: Record<string, unknown>) => void = () => {},
+): Promise<TaskResult> {
+  let assistantText = '';
+  let resultText = '';
+  let structuredOutput: Record<string, unknown> | null = null;
+  let failureMessage: string | null = null;
+  let completed = false;
+  let claudeCodeVersion: string | undefined;
+  const responseModels = new Set<string>();
+  let sessionId: string | undefined;
+
+  try {
+    for await (const message of messages) {
+      const msg = message as Record<string, unknown>;
+
+      if (msg.type === 'system' && msg.subtype === 'init') {
+        sessionId = msg.session_id as string;
+        claudeCodeVersion = msg.claude_code_version as string;
+      }
+
+      if (msg.type === 'assistant') {
+        const assistant = msg.message as Record<string, unknown>;
+        if (typeof assistant?.model === 'string') responseModels.add(assistant.model);
+        const content = assistant?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            const b = block as Record<string, unknown>;
+            if (b.type === 'text') {
+              assistantText += b.text as string;
+            }
+            if (b.type === 'tool_use') {
+              onUpdate({ sessionUpdate: 'tool_call', title: b.name as string });
+            }
+          }
+        }
+      }
+
+      if (msg.type === 'result' && msg.subtype === 'success') {
+        completed = !msg.is_error;
+        resultText = (msg.result as string) || '';
+        if (isPlainObject(msg.structured_output)) {
+          structuredOutput = msg.structured_output;
+        }
+      }
+
+      failureMessage = claudeResultError(msg) || failureMessage;
+    }
+  } catch (error) {
+    if (failureMessage) throw new Error(`Claude Agent SDK: ${failureMessage}`);
+    // Partial assistant JSON is not a successful terminal SDK result.
+    throw error;
+  }
+
+  if (failureMessage) {
+    throw new Error(`Claude Agent SDK: ${failureMessage}`);
+  }
+
+  if (!completed) throw new Error('Claude Agent SDK: stream ended without a successful result');
+
+  const rawText = (resultText || assistantText).trim();
+
+  return {
+    rawText,
+    parsed: structuredOutput || extractJsonObject(rawText),
+    meta: { sessionId, structuredOutput: !!structuredOutput, claudeCodeVersion, responseModels: [...responseModels] },
+  };
 }
 
 // SDK failures have specific subtypes (for example error_max_turns), not just "error".
