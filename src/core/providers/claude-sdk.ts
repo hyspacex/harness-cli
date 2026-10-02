@@ -22,7 +22,7 @@ export class ClaudeSdkProvider implements ProviderRuntime {
   private onUpdate: NonNullable<ProviderHooks['onUpdate']>;
 
   constructor(options: ClaudeSdkConfig, hooks: ProviderHooks = {}) {
-    this.model = options.model || 'claude-opus-4-7';
+    this.model = options.model || 'claude-opus-5-5';
     this.permissionMode = options.permissionMode || 'bypassPermissions';
     this.baseMcpServers = options.mcpServers || {};
     this.baseAllowedTools = options.allowedTools || [];
@@ -39,7 +39,9 @@ export class ClaudeSdkProvider implements ProviderRuntime {
     let assistantText = '';
     let resultText = '';
     let structuredOutput: Record<string, unknown> | null = null;
-    let isError = false;
+    let failureMessage: string | null = null;
+    let claudeCodeVersion: string | undefined;
+    const responseModels = new Set<string>();
     let sessionId: string | undefined;
 
     try {
@@ -49,10 +51,13 @@ export class ClaudeSdkProvider implements ProviderRuntime {
 
         if (msg.type === 'system' && msg.subtype === 'init') {
           sessionId = msg.session_id as string;
+          claudeCodeVersion = msg.claude_code_version as string;
         }
 
         if (msg.type === 'assistant') {
-          const content = (msg.message as Record<string, unknown>)?.content;
+          const assistant = msg.message as Record<string, unknown>;
+          if (typeof assistant?.model === 'string') responseModels.add(assistant.model);
+          const content = assistant?.content;
           if (Array.isArray(content)) {
             for (const block of content) {
               const b = block as Record<string, unknown>;
@@ -68,18 +73,15 @@ export class ClaudeSdkProvider implements ProviderRuntime {
 
         if (msg.type === 'result' && msg.subtype === 'success') {
           resultText = (msg.result as string) || '';
-          isError = !!(msg.is_error);
           if (isPlainObject(msg.structured_output)) {
             structuredOutput = msg.structured_output;
           }
         }
 
-        if (msg.type === 'result' && msg.subtype === 'error') {
-          resultText = (msg.result as string) || (msg.error as string) || '';
-          isError = true;
-        }
+        failureMessage = claudeResultError(msg) || failureMessage;
       }
     } catch (error) {
+      if (failureMessage) throw new Error(`Claude Agent SDK: ${failureMessage}`);
       // SDK process crashed — use whatever we collected so far.
       const partialText = (resultText || assistantText).trim();
       if (partialText) {
@@ -91,8 +93,8 @@ export class ClaudeSdkProvider implements ProviderRuntime {
       throw error;
     }
 
-    if (isError && resultText) {
-      throw new Error(`Claude Agent SDK: ${resultText}`);
+    if (failureMessage) {
+      throw new Error(`Claude Agent SDK: ${failureMessage}`);
     }
 
     const rawText = (resultText || assistantText).trim();
@@ -100,7 +102,7 @@ export class ClaudeSdkProvider implements ProviderRuntime {
     return {
       rawText,
       parsed: structuredOutput || extractJsonObject(rawText),
-      meta: { sessionId, structuredOutput: !!structuredOutput },
+      meta: { sessionId, structuredOutput: !!structuredOutput, claudeCodeVersion, responseModels: [...responseModels] },
     };
   }
 
@@ -164,6 +166,19 @@ export class ClaudeSdkProvider implements ProviderRuntime {
 
     return options;
   }
+}
+
+// SDK failures have specific subtypes (for example error_max_turns), not just "error".
+export function claudeResultError(message: Record<string, unknown>): string | null {
+  if (message.type !== 'result') return null;
+  if (message.subtype === 'success' && !message.is_error) return null;
+  const errors = Array.isArray(message.errors)
+    ? message.errors.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : [];
+  return errors.join('; ')
+    || (typeof message.result === 'string' && message.result)
+    || (typeof message.error === 'string' && message.error)
+    || `Query ended with ${String(message.subtype || 'an unknown error')}`;
 }
 
 export function buildClaudeTaskOutputFormat(task: Pick<TaskDefinition, 'kind' | 'label'>): OutputFormat {
