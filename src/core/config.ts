@@ -56,7 +56,7 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   skills: {},
   profiles: {},
   claudeSdk: {
-    model: 'claude-opus-4-7',
+    model: 'claude-opus-5-5',
     permissionMode: 'bypassPermissions',
     mcpServers: {},
     allowedTools: [],

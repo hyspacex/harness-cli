@@ -107,7 +107,10 @@ You: "Build a project management app with Kanban boards"
 
 ### Provider models and authentication
 
-The defaults are `claude-opus-4-7` for `claude-sdk` and `gpt-6.1-sol` for `codex`.
+The defaults are `claude-opus-5-5` for `claude-sdk` and `gpt-6.1-sol` for `codex`.
+Opus 5.5 is verified with Agent SDK 0.3.287 and its bundled Claude Code 2.1.287.
+The SDK manages adaptive thinking and structured output; no raw API thinking/tool-choice overrides are required.
+See the [Opus 5.5 migration guide](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide).
 Override `claudeSdk.model` or `codex.model` in your config for models available to your account.
 The Codex default replaces `gpt-5.5`, which [retires from ChatGPT-authenticated Codex on October 14, 2026](https://learn.chatgpt.com/docs/models#gpt-55-retirement).
 Existing config files retain their explicit model selections; update those separately.
@@ -229,7 +232,7 @@ A typical Claude-only setup:
     "test": "npm test"
   },
   "claudeSdk": {
-    "model": "claude-opus-4-7",
+    "model": "claude-opus-5-5",
     "permissionMode": "bypassPermissions",
     "roleOverrides": {
       "generator": {
