@@ -69,6 +69,8 @@ export class CodexAppServerClient {
   private rl: readline.Interface | null = null;
   private started = false;
   private activeThreadId: string | null = null;
+  private transportError: Error | null = null;
+  private failureListeners = new Set<(error: Error) => void>();
 
   constructor(options: CodexAppServerClientOptions) {
     this.command = options.command;
@@ -88,11 +90,13 @@ export class CodexAppServerClient {
   async start(): Promise<void> {
     if (this.started) return;
 
-    this.child = spawn(this.command, this.args, {
+    this.transportError = null;
+    const child = spawn(this.command, this.args, {
       cwd: this.cwd,
       env: { ...process.env, ...this.env },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.child = child;
 
     this.child.stdout?.setEncoding('utf8');
     this.child.stderr?.setEncoding('utf8');
@@ -108,14 +112,13 @@ export class CodexAppServerClient {
       this.onStdErr(String(chunk));
     });
 
-    this.child.on('error', (error: Error) => {
-      this.rejectAllPending(error);
-    });
-
-    this.child.on('close', (code: number | null) => {
-      if (code !== 0 && this.pending.size > 0) {
-        this.rejectAllPending(new Error(`Codex app-server exited with code ${code}`));
-      }
+    const fail = (error: Error): void => {
+      if (this.child === child) this.failTransport(error);
+    };
+    child.on('error', fail);
+    child.stdin?.on('error', fail);
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      fail(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code}`}`));
     });
 
     this.started = true;
@@ -136,30 +139,40 @@ export class CodexAppServerClient {
   }
 
   async close(): Promise<void> {
-    if (!this.started || !this.child) return;
+    const child = this.child;
+    if (!child) return;
 
-    if (this.activeThreadId) {
+    // Unsubscribe is best effort: a wedged server must not prevent task cleanup.
+    if (this.activeThreadId && !this.transportError) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        await this.request('thread/unsubscribe', { threadId: this.activeThreadId });
+        await Promise.race([
+          this.request('thread/unsubscribe', { threadId: this.activeThreadId }),
+          new Promise<void>((resolve) => { timeout = setTimeout(resolve, 250); }),
+        ]);
       } catch {
-        // Ignore best-effort cleanup failures.
+        // Transport failures are already delivered to active requests/turns.
+      } finally {
+        clearTimeout(timeout);
       }
     }
 
-    try {
-      this.child.stdin?.end();
-    } catch {
-      // ignore
-    }
-
-    if (!this.child.killed) {
-      this.child.kill('SIGTERM');
+    this.failTransport(new Error('Codex app-server client closed'));
+    child.stdin?.end();
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      const forceKill = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }, 1000);
+      forceKill.unref();
+      child.once('close', () => clearTimeout(forceKill));
     }
 
     this.started = false;
     this.activeThreadId = null;
     this.rl?.close();
     this.rl = null;
+    this.child = null;
   }
 
   request(method: string, params: unknown): Promise<unknown> {
@@ -167,8 +180,17 @@ export class CodexAppServerClient {
     const payload = { id, method, params };
 
     return new Promise((resolve, reject) => {
+      if (this.transportError) {
+        reject(this.transportError);
+        return;
+      }
       this.pending.set(id, { resolve, reject, method, createdAt: nowIso() });
-      this.send(payload);
+      try {
+        this.send(payload);
+      } catch (error) {
+        this.pending.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
@@ -234,6 +256,7 @@ export class CodexAppServerClient {
       const cleanup = (): void => {
         clearTimeout(timeout);
         this.notificationListeners.delete(listener);
+        this.failureListeners.delete(onFailure);
       };
 
       const listener: NotificationListener = (message) => {
@@ -265,7 +288,10 @@ export class CodexAppServerClient {
         reject(new Error(`Codex ChatGPT login failed: ${errorText}`));
       };
 
+      const onFailure = (error: Error): void => { cleanup(); reject(error); };
       this.notificationListeners.add(listener);
+      this.failureListeners.add(onFailure);
+      if (this.transportError) onFailure(this.transportError);
     });
   }
 
@@ -309,6 +335,8 @@ export class CodexAppServerClient {
       const method = asString(message.method);
       if (!method) return;
       const params = asRecord(message.params);
+      if (params?.threadId && params.threadId !== threadId) return;
+      if (params?.turnId && turnId && params.turnId !== turnId) return;
 
       if (method === 'turn/plan/updated') {
         const entries = Array.isArray(params?.plan)
@@ -420,6 +448,7 @@ export class CodexAppServerClient {
       }
 
       while (!completed) {
+        if (this.transportError) throw this.transportError;
         await sleep(25);
       }
 
@@ -553,6 +582,12 @@ export class CodexAppServerClient {
         message: `Unsupported Codex server request: ${method}`,
       },
     });
+  }
+
+  private failTransport(error: Error): void {
+    this.transportError ||= error;
+    this.rejectAllPending(this.transportError);
+    for (const listener of this.failureListeners) listener(this.transportError);
   }
 
   private rejectAllPending(error: Error): void {

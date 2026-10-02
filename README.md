@@ -169,6 +169,8 @@ npm run harness -- status
 npm run harness -- status <run-id>
 ```
 
+Resume continues an active sprint even when it has reached `maxSprints`. Completed evaluation rounds are reused only after their canonical results, verdicts, and frozen evidence are validated. Incomplete rounds are replayed, and failed rounds retain their repair instructions and generator session.
+
 ## Providers
 
 Harness CLI is provider-agnostic. You choose which AI backend builds your app — and you can use different providers for different roles.

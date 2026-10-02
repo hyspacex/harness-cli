@@ -89,6 +89,7 @@ interface SprintProgress {
   nextRound: number;
   latestEvalPath: string | null;
   latestEvalParsed: Record<string, unknown> | null;
+  latestRepairDirectivePath: string | null;
   allEvalPaths: string[];
   allFrozenEvidenceDirs: string[];
 }
@@ -450,7 +451,7 @@ export class HarnessRunner {
       runState.status = 'running';
       await this.saveRunState(runState);
 
-      while (runState.sprint < this.config.maxSprints) {
+      while (runState.sprint < this.config.maxSprints || this.getActiveFeature(backlog, runState)) {
         const feature = await this.getCurrentOrNextFeature(runState, backlog);
         if (!feature) {
           const backlogComplete = backlog.features.every((candidate) => candidate.status === 'done');
@@ -475,7 +476,7 @@ export class HarnessRunner {
         const progress = await this.loadSprintProgress(runState, evalCriteria);
         let latestEvalPath = progress.latestEvalPath;
         let latestEvalParsed = progress.latestEvalParsed;
-        let latestRepairDirectivePath: string | null = null;
+        let latestRepairDirectivePath = progress.latestRepairDirectivePath;
         const allEvalPaths = [...progress.allEvalPaths];
         let latestFrozenEvidenceDir = progress.allFrozenEvidenceDirs.at(-1) || null;
         const allFrozenEvidenceDirs = [...progress.allFrozenEvidenceDirs];
@@ -812,26 +813,62 @@ export class HarnessRunner {
     const allFrozenEvidenceDirs: string[] = [];
     let latestEvalPath: string | null = null;
     let latestEvalParsed: Record<string, unknown> | null = null;
+    let latestRepairDirectivePath: string | null = null;
+    let passed = false;
 
+    // Only a contiguous sequence of finalized evaluations consumes repair rounds.
+    // Provider-written output alone may have survived an interrupted task.
+    runState.currentVerdictPath = null;
     for (let round = 0; round <= this.config.maxRepairRounds; round += 1) {
       const evalPath = this.evalPath(runState.sprint, round, runState.runDir);
-      if (!(await fileExists(evalPath))) continue;
+      const evalJsonPath = this.evalJsonPath(runState.sprint, round, runState.runDir);
+      const verdictPath = this.verdictPath(runState.sprint, round, runState.runDir);
+      if (!(await fileExists(evalPath)) || !(await fileExists(evalJsonPath)) || !(await fileExists(verdictPath))) break;
+
+      const verdict = await readJson<HarnessVerdict | null>(verdictPath, null);
+      if (!verdict || verdict.version !== 1 || verdict.sprint !== runState.sprint
+        || verdict.evaluationRound !== round || verdict.featureId !== runState.currentFeatureId) break;
+      const canonicalEval = await this.readCanonicalEvaluation(evalJsonPath);
+      if (canonicalEval.sprint !== runState.sprint || canonicalEval.evaluationRound !== round
+        || canonicalEval.feature.id !== runState.currentFeatureId) break;
+
+      const frozenEvidenceDir = this.frozenEvidenceDir(runState.sprint, round, runState.runDir);
+      const hasFrozenEvidence = await fileExists(frozenEvidenceDir);
+      if ((verdict.reason !== 'smoke_failure' || (await fileExists(this.evidenceDir(runState.sprint, round, runState.runDir))))
+        && !(await fileExists(this.frozenEvidenceManifestPath(frozenEvidenceDir)))) break;
+      if (hasFrozenEvidence) {
+        await this.assertFrozenEvidenceIntact(runState, frozenEvidenceDir);
+        allFrozenEvidenceDirs.push(frozenEvidenceDir);
+      }
 
       allEvalPaths.push(evalPath);
       latestEvalPath = evalPath;
-      latestEvalParsed = await this.readParsedTaskLog(this.evaluatorLogName(runState.sprint, round), runState);
+      latestEvalParsed = canonicalEval as unknown as Record<string, unknown>;
+      runState.currentEvalPath = evalPath;
+      runState.currentEvalJsonPath = evalJsonPath;
+      runState.currentVerdictPath = verdictPath;
+      passed = verdict.passed && resolvePass(latestEvalParsed, evalCriteria, this.getEffectivePassBarOverrides(runState));
+      if (passed) break;
+      // Also recover an interruption between writing the verdict and directive.
+      latestRepairDirectivePath = await this.writeRepairDirective(
+        runState, round, verdict, evalCriteria, hasFrozenEvidence ? frozenEvidenceDir : null,
+      );
+    }
 
-      const frozenEvidenceDir = this.frozenEvidenceDir(runState.sprint, round, runState.runDir);
-      if (await fileExists(frozenEvidenceDir)) {
-        allFrozenEvidenceDirs.push(frozenEvidenceDir);
+    if (!passed) {
+      // A replay must not inherit a verdict from an interrupted attempt, including
+      // later files after a gap in the completed-round sequence.
+      for (let round = allEvalPaths.length; round <= this.config.maxRepairRounds; round += 1) {
+        await fs.rm(this.verdictPath(runState.sprint, round, runState.runDir), { force: true });
       }
     }
 
     return {
-      passed: resolvePass(latestEvalParsed, evalCriteria, runState.currentNegotiation?.passBarOverrides ?? {}),
+      passed,
       nextRound: allEvalPaths.length,
       latestEvalPath,
       latestEvalParsed,
+      latestRepairDirectivePath,
       allEvalPaths,
       allFrozenEvidenceDirs,
     };
