@@ -102,7 +102,7 @@ You: "Build a project management app with Kanban boards"
 
 ### Prerequisites
 
-- Node.js >= 20
+- Node.js 20.19+ or 22.12+ (Node 22 or 24 LTS recommended)
 - An Anthropic API key (for the default Claude Agent SDK provider)
 
 ### Install and run

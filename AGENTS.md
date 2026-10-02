@@ -8,7 +8,7 @@ Start with `src/cli.ts` for command parsing and `src/core/harness.ts` for the sp
 Lab assets live under `lab/` (`cases/`, `fixtures/`, `suites/`, `results/`); product-facing example cases stay in `evals/cases/`. `examples/harness.config.json` is the reference config, `docs/` holds design notes, and `dist/` is generated build output. Do not edit `dist/` by hand. See `ARCHITECTURE.md` for the layer boundary and split triggers.
 
 ## Build, Test, and Development Commands
-- `npm install`: install dependencies; Node.js `>=20` is required.
+- `npm install`: install dependencies; Node.js `^20.19.0 || >=22.12.0` is required.
 - `npm run build:harness`: compile the harness TypeScript (`src/`) into `dist/`.
 - `npm run build`: build the example app workspace (vite).
 - `node --test test/*.test.mjs`: run the test suite.

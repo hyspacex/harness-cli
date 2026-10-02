@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { MAP_STYLE, SEATTLE_CENTER, INITIAL_ZOOM, ALL_MODES, type TransitMode } from '../types/transit';
 import { useMapLayers, getLayerIdsForMode, getAllRouteLayerIds, getAllHighlightLayerIds } from '../hooks/useMapLayers';
 import { useMapInteractions } from '../hooks/useMapInteractions';
 import { useTransitContext } from '../context/TransitContext';
+
+// Resolve the MapLibre 6 module worker through Vite in development and production.
+maplibregl.setWorkerUrl(mapWorkerUrl);
 
 interface TransitGeoJSON {
   routes: GeoJSON.FeatureCollection | null;
