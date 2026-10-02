@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Maintenance
+
+- Replace the retiring `gpt-5.5` Codex default with `gpt-6.1-sol`, advertised by the installed app-server as its upgrade target. Keep the supported Claude Opus 4.7 default and document the distinct provider runtimes.
+- Update MapLibre GL, CSV parsing, Vite, and vulnerable transitive dependencies; the refreshed lockfile has no npm audit findings.
+- Adapt the example app to MapLibre 6 named exports and explicitly bundle its module worker through Vite for development and production.
+- Align the documented Node requirement with Vite (`^20.19.0 || >=22.12.0`), test both minimum versions plus Node 24, and include example app type checks and builds in CI.
+
 ## [0.5.0] - 2026-06-10
 
 ### Added

@@ -102,8 +102,21 @@ You: "Build a project management app with Kanban boards"
 
 ### Prerequisites
 
-- Node.js >= 20
+- Node.js 20.19+ or 22.12+ (Node 22 or 24 LTS recommended)
 - An Anthropic API key (for the default Claude Agent SDK provider)
+
+### Provider models and authentication
+
+The defaults are `claude-opus-4-7` for `claude-sdk` and `gpt-6.1-sol` for `codex`.
+Override `claudeSdk.model` or `codex.model` in your config for models available to your account.
+The Codex default replaces `gpt-5.5`, which [retires from ChatGPT-authenticated Codex on October 14, 2026](https://learn.chatgpt.com/docs/models#gpt-55-retirement).
+Existing config files retain their explicit model selections; update those separately.
+
+`codex` launches the configured `codex app-server` and uses its existing local login.
+`claude-sdk` calls the npm Claude Agent SDK, including its bundled Claude Code runtime;
+it does not launch the separately installed `claude` executable. Updating that executable
+alone therefore does not update this integration. Use the SDK's supported authentication
+for your environment; an Anthropic API key remains the documented setup for this project.
 
 ### Install and run
 

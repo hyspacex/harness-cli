@@ -17,11 +17,11 @@
     "parse-gtfs": "node scripts/parse-gtfs.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
-    "maplibre-gl": "^5.22.0",
+    "maplibre-gl": "^6.11.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
@@ -30,9 +30,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "csv-parse": "^6.2.1",
+    "csv-parse": "^7.0.3",
     "typescript": "^5.7.0",
     "unzipper": "^0.12.3",
-    "vite": "^8.0.3"
+    "vite": "^8.3.2"
   }
 }

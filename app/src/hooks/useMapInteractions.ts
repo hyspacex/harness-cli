@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, type MutableRefObject } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { getAllRouteLayerIds, getAllHighlightLayerIds, getAllStopLayerIds } from './useMapLayers';
 import { MODE_LABELS, type TransitMode } from '../types/transit';
 
