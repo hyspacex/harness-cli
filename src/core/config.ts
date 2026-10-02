@@ -88,7 +88,7 @@ export const DEFAULT_CONFIG: HarnessConfig = {
     command: 'codex',
     args: ['app-server'],
     env: {},
-    model: 'gpt-5.5',
+    model: 'gpt-6.1-sol',
     effort: 'xhigh',
     summary: 'concise',
     serviceTier: 'fast',
